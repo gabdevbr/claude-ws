@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Settings, Plus, Search, PanelLeft, PanelRight, FolderTree, MessageCircleQuestion, Terminal, X } from 'lucide-react';
+import { Settings, Plus, Search, PanelLeft, PanelRight, FolderTree, MessageCircleQuestion, Network, Terminal, X } from 'lucide-react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,6 +26,7 @@ import { useProjectStore } from '@/stores/project-store';
 import { useSettingsUIStore } from '@/stores/settings-ui-store';
 import { ProjectSelector, ProjectSelectorContent } from '@/components/header/project-selector';
 import { useQuestionsStore } from '@/stores/questions-store';
+import { useWorkflowStore } from '@/stores/workflow-store';
 import { useTranslations } from 'next-intl';
 
 interface HeaderProps {
@@ -46,6 +47,8 @@ export function Header({ onCreateTask, onAddProject, searchQuery: externalSearch
   const { activeProjectId, selectedProjectIds } = useProjectStore();
   const { pendingQuestions, fetchQuestions, isOpen: questionsPanelOpen, togglePanel: toggleQuestionsPanel } = useQuestionsStore();
   const questionCount = pendingQuestions.size;
+  const { isOpen: workflowPanelOpen, togglePanel: toggleWorkflowPanel, getActiveAgentCount } = useWorkflowStore();
+  const activeAgentCount = getActiveAgentCount();
   const [searchOpen, setSearchOpen] = useState(false);
 
   // Fetch pending questions on mount
@@ -110,7 +113,7 @@ export function Header({ onCreateTask, onAddProject, searchQuery: externalSearch
               <button
                 onClick={() => setSearchQuery('')}
                 className="absolute right-2 top-2 h-5 w-5 flex items-center justify-center rounded-sm hover:bg-muted-foreground/20 transition-colors"
-                aria-label="Clear search"
+                aria-label={t('clearSearch')}
               >
                 <X className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
@@ -193,6 +196,32 @@ export function Header({ onCreateTask, onAddProject, searchQuery: externalSearch
               <TooltipContent>
                 <p>
                   Pending questions{questionCount > 0 ? ` (${questionCount})` : ''}
+                </p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          {/* Workflow panel toggle */}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={workflowPanelOpen ? 'secondary' : 'ghost'}
+                  size="icon"
+                  onClick={toggleWorkflowPanel}
+                  className="shrink-0 relative"
+                >
+                  <Network className="h-4 w-4" />
+                  {activeAgentCount > 0 && (
+                    <span className="absolute -top-1 -right-1 h-4 min-w-4 px-1 flex items-center justify-center text-[10px] font-medium bg-blue-500 text-white rounded-full">
+                      {activeAgentCount}
+                    </span>
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>
+                  Agent workflow{activeAgentCount > 0 ? ` (${activeAgentCount})` : ''}
                 </p>
               </TooltipContent>
             </Tooltip>
@@ -318,7 +347,7 @@ export function Header({ onCreateTask, onAddProject, searchQuery: externalSearch
               <button
                 onClick={() => setSearchQuery('')}
                 className="absolute right-2 top-2 h-5 w-5 flex items-center justify-center rounded-sm hover:bg-muted-foreground/20 transition-colors"
-                aria-label="Clear search"
+                aria-label={t('clearSearch')}
               >
                 <X className="h-3.5 w-3.5 text-muted-foreground" />
               </button>

@@ -12,6 +12,7 @@ import { SetupDialog } from '@/components/settings/setup-dialog';
 import { SidebarPanel, FileTabsPanel, DiffTabsPanel } from '@/components/sidebar';
 import { RightSidebar } from '@/components/right-sidebar';
 import { QuestionsPanel } from '@/components/questions/questions-panel';
+import { WorkflowPanel } from '@/components/workflow/workflow-panel';
 import { PluginList } from '@/components/agent-factory/plugin-list';
 import { AccessAnywhereWizard } from '@/components/access-anywhere';
 import { TerminalPanel } from '@/components/terminal/terminal-panel';
@@ -25,8 +26,10 @@ import { useAgentFactoryUIStore } from '@/stores/agent-factory-ui-store';
 import { useSettingsUIStore } from '@/stores/settings-ui-store';
 import { useIsMobileViewport } from '@/hooks/use-mobile-viewport';
 import { useTerminalStore } from '@/stores/terminal-store';
+import { useTranslations } from 'next-intl';
 
 function KanbanApp() {
+  const tCommon = useTranslations('common');
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [setupOpen, setSetupOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -135,7 +138,7 @@ function KanbanApp() {
     const tab = openTabs.find(t => t.id === tabId);
     if (tab?.isDirty) {
       const fileName = tab.filePath.split('/').pop() || tab.filePath;
-      if (!confirm(`"${fileName}" has unsaved changes. Close anyway?`)) {
+      if (!confirm(tCommon('unsavedChangesConfirm', { fileName }))) {
         return;
       }
     }
@@ -205,7 +208,7 @@ function KanbanApp() {
       <div className="flex h-screen items-center justify-center">
         <div className="flex items-center gap-3 text-muted-foreground">
           <img src="/logo.svg" alt="Logo" className="h-8 w-8 animate-spin" />
-          <span>Loading to Claude<span style={{ color: '#d87756' }}>.</span>WS</span>
+          <span>{tCommon('loadingApp')}</span>
         </div>
       </div>
     );
@@ -237,12 +240,12 @@ function KanbanApp() {
           ) : (
             <div className="flex h-full items-center justify-center">
               <div className="text-center">
-                <p className="text-muted-foreground mb-4">No projects configured</p>
+                <p className="text-muted-foreground mb-4">{tCommon('noProjectsConfigured')}</p>
                 <button
                   onClick={() => setSetupOpen(true)}
                   className="text-primary underline hover:no-underline"
                 >
-                  Set up a project
+                  {tCommon('setUpProject')}
                 </button>
               </div>
             </div>
@@ -286,6 +289,9 @@ function KanbanApp() {
 
       {/* Questions Panel - pending questions sidebar */}
       <QuestionsPanel />
+
+      {/* Workflow Panel - agent workflow sidebar */}
+      <WorkflowPanel />
 
       {/* Access Anywhere Wizard */}
       <AccessAnywhereWizard />
