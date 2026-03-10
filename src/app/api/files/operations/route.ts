@@ -6,29 +6,9 @@ import os from 'os';
 import AdmZip from 'adm-zip';
 import { createLogger } from '@/lib/logger';
 import { getContentTypeForExtension } from '@/lib/content-types';
+import { validatePath } from '@/lib/validate-path-within-home-directory';
 
 const log = createLogger('FileOperations');
-
-/**
- * Validate path stays within allowed root directory.
- * Prevents path traversal attacks like ../../../etc/passwd
- *
- * @param targetPath - User-provided path to validate
- * @param allowedRoot - Root directory that bounds allowed operations
- * @returns Resolved absolute path
- * @throws Error if path traversal detected
- */
-function validatePath(targetPath: string, allowedRoot: string): string {
-  const resolved = path.resolve(targetPath);
-  const relative = path.relative(allowedRoot, resolved);
-
-  // If relative path starts with '..', it's outside allowed root
-  if (relative.startsWith('..')) {
-    throw new Error('Path traversal detected');
-  }
-
-  return resolved;
-}
 
 /**
  * Validate that the root path itself is within allowed boundaries.

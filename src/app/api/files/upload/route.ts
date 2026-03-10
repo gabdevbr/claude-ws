@@ -8,23 +8,9 @@ import { createGunzip } from 'zlib';
 import { pipeline } from 'stream/promises';
 import { createReadStream, createWriteStream } from 'fs';
 import { createLogger } from '@/lib/logger';
+import { validatePath } from '@/lib/validate-path-within-home-directory';
 
 const log = createLogger('FileUpload');
-
-/**
- * Validate path stays within allowed root directory.
- * Prevents path traversal attacks like ../../../etc/passwd
- */
-function validatePath(targetPath: string, allowedRoot: string): string {
-  const resolved = path.resolve(targetPath);
-  const relative = path.relative(allowedRoot, resolved);
-
-  if (relative.startsWith('..')) {
-    throw new Error('Path traversal detected');
-  }
-
-  return resolved;
-}
 
 /**
  * Extract a .zip file to a directory
@@ -236,7 +222,7 @@ export async function POST(request: NextRequest) {
                 decompressed: true,
               });
             } catch (extractError) {
-              console.error(`Failed to extract ${filename}:`, extractError);
+              log.error({ error: extractError, filename }, 'Failed to extract archive');
               // Keep the archive if extraction fails
               results.push({
                 name: filename,
