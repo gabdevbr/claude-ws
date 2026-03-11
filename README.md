@@ -168,7 +168,6 @@ MIT
 
 ![Desktop](./public/desktop-review-0.png)
 ![Desktop](./public/desktop-review-1.png)
-![Desktop](./public/desktop-review-2.png)
 ![Desktop](./public/desktop-review-3.png)
 ![Desktop](./public/desktop-review-4.png)
-![Mobile](./public/desktop-review-0.png)
+![Mobile](./public/mobile-review-0.png)
