@@ -7,13 +7,15 @@ import {
   createTaskAction,
   duplicateTaskAction,
   deleteTasksByStatusAction,
+} from './task-store-api-actions';
+import {
   reorderTasksAction,
   updateTaskStatusAction,
   renameTaskAction,
   updateTaskDescriptionAction,
   setTaskChatInitAction,
   moveTaskToInProgressAction,
-} from './task-store-api-actions';
+} from './task-store-mutation-api-actions';
 
 interface TaskStore {
   tasks: Task[];
