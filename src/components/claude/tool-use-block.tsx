@@ -1,28 +1,16 @@
 'use client';
 
 import { useState, memo } from 'react';
-import {
-  FileText,
-  FilePlus,
-  FileEdit,
-  Terminal,
-  Search,
-  FolderSearch,
-  CheckSquare,
-  Globe,
-  ChevronDown,
-  ChevronRight,
-  AlertCircle,
-  Zap,
-  Copy,
-  Check,
-} from 'lucide-react';
+import { ChevronDown, ChevronRight, AlertCircle } from 'lucide-react';
 import { RunningDots } from '@/components/ui/running-dots';
 import { cn } from '@/lib/utils';
-import { DiffView } from './diff-view';
 import { Button } from '@/components/ui/button';
 import { ConfigProviderButton } from '@/components/auth/auth-error-message';
 import { isProviderAuthError } from '@/components/auth/agent-provider-dialog';
+import { getToolIcon, getToolActiveVerb, getToolDisplay, getResultSummary } from './tool-use-block-icon-verb-display-utils';
+import { BashBlock } from './tool-use-block-bash-command-renderer';
+import { TodoListBlock, type TodoItem } from './tool-use-block-todo-list-renderer';
+import { EditBlock } from './tool-use-block-edit-diff-renderer';
 
 interface ToolUseBlockProps {
   name: string;
@@ -32,257 +20,6 @@ interface ToolUseBlockProps {
   isStreaming?: boolean;
   className?: string;
   onOpenPanel?: () => void;
-}
-
-// Get icon for tool type
-function getToolIcon(name: string) {
-  const icons: Record<string, typeof FileText> = {
-    Read: FileText,
-    Write: FilePlus,
-    Edit: FileEdit,
-    Bash: Terminal,
-    Grep: Search,
-    Glob: FolderSearch,
-    TodoWrite: CheckSquare,
-    WebFetch: Globe,
-    WebSearch: Globe,
-    Skill: Zap,
-  };
-  return icons[name] || FileText;
-}
-
-// Get active verb for tool (for streaming status)
-function getToolActiveVerb(name: string): string {
-  const verbs: Record<string, string> = {
-    Read: 'Reading',
-    Write: 'Writing',
-    Edit: 'Editing',
-    Bash: 'Running',
-    Grep: 'Searching',
-    Glob: 'Finding',
-    TodoWrite: 'Updating todos',
-    WebFetch: 'Fetching',
-    WebSearch: 'Searching web',
-    Skill: 'Executing',
-    Task: 'Delegating',
-    AskUserQuestion: 'Waiting for',
-  };
-  return verbs[name] || 'Processing';
-}
-
-// Get compact display text for tool
-function getToolDisplay(name: string, input: any): string {
-  if (!input) return name;
-
-  switch (name) {
-    case 'Read':
-      return input.file_path || 'file...';
-    case 'Write':
-      return input.file_path || 'file...';
-    case 'Edit':
-      return input.file_path || 'file...';
-    case 'Bash':
-      return input.description || input.command?.slice(0, 80) || 'command...';
-    case 'Grep':
-      return `"${input.pattern || ''}"`;
-    case 'Glob':
-      return `${input.pattern || ''}`;
-    case 'TodoWrite':
-      if (input.todos && Array.isArray(input.todos)) {
-        const inProgress = input.todos.filter((t: any) => t.status === 'in_progress');
-        const pending = input.todos.filter((t: any) => t.status === 'pending');
-        const completed = input.todos.filter((t: any) => t.status === 'completed');
-        return `${completed.length}✓ ${inProgress.length}⟳ ${pending.length}○`;
-      }
-      return 'list';
-    case 'Skill':
-      return input.skill || 'unknown';
-    case 'WebFetch':
-      try {
-        const url = new URL(input.url);
-        return url.hostname + url.pathname.slice(0, 30);
-      } catch {
-        return input.url?.slice(0, 50) || 'url...';
-      }
-    case 'WebSearch':
-      return `"${input.query || ''}"`;
-    case 'Task':
-      return input.description || 'task...';
-    default:
-      return name;
-  }
-}
-
-// Get result summary for completed tool calls (like "Read 81 lines")
-function getResultSummary(name: string, result?: string): string | null {
-  if (!result) return null;
-
-  switch (name) {
-    case 'Read': {
-      // Count lines from result (result is the file content)
-      const lines = result.split('\n').length;
-      return `${lines} lines`;
-    }
-    case 'Grep': {
-      // Try to extract match count
-      const matchCount = result.split('\n').filter(l => l.trim()).length;
-      if (matchCount === 0) return 'no matches';
-      return `${matchCount} match${matchCount !== 1 ? 'es' : ''}`;
-    }
-    case 'Glob': {
-      // Count files found
-      const files = result.split('\n').filter(l => l.trim()).length;
-      if (files === 0) return 'no files';
-      return `${files} file${files !== 1 ? 's' : ''}`;
-    }
-    case 'Task': {
-      // Show completion status
-      if (result.includes('completed')) return 'completed';
-      return null;
-    }
-    case 'Write':
-      return 'written';
-    case 'Edit':
-      return 'edited';
-    default:
-      return null;
-  }
-}
-
-// Bash command block component
-function BashBlock({ command, output, isError }: { command: string; output?: string; isError?: boolean }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = async (e: React.MouseEvent) => {
-    e.stopPropagation();
-    await navigator.clipboard.writeText(command);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  const hasOutput = output && output.trim().length > 0;
-  const outputLines = output?.split('\n').length || 0;
-
-  return (
-    <div className="rounded-md border border-border overflow-hidden text-xs font-mono w-full max-w-full">
-      {/* Command header */}
-      <div
-        className={cn(
-          'flex items-center gap-2 px-3 py-2 bg-zinc-900 dark:bg-zinc-950 w-full max-w-full',
-          hasOutput && 'cursor-pointer hover:bg-zinc-800 dark:hover:bg-zinc-900'
-        )}
-        onClick={() => hasOutput && setIsExpanded(!isExpanded)}
-      >
-        <Terminal className="size-3.5 text-zinc-400 shrink-0" />
-        <code className="text-zinc-100 flex-1 truncate min-w-0">{command}</code>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            onClick={handleCopy}
-            className="size-5 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-700"
-          >
-            {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
-          </Button>
-          {hasOutput && (
-            <span className="text-zinc-500 text-[10px]">
-              {outputLines} line{outputLines !== 1 ? 's' : ''}
-            </span>
-          )}
-          {hasOutput && (
-            isExpanded ? (
-              <ChevronDown className="size-3 text-zinc-500" />
-            ) : (
-              <ChevronRight className="size-3 text-zinc-500" />
-            )
-          )}
-        </div>
-      </div>
-
-      {/* Output */}
-      {isExpanded && hasOutput && (
-        <div className={cn(
-          'px-3 py-2 bg-zinc-950 dark:bg-black max-h-48 overflow-auto',
-          isError && 'text-red-400'
-        )}>
-          <pre className="text-zinc-300 whitespace-pre-wrap break-all text-[11px] leading-relaxed">
-            {output}
-          </pre>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Todo item interface
-interface TodoItem {
-  content: string;
-  status: 'pending' | 'in_progress' | 'completed';
-  activeForm?: string;
-}
-
-// TodoWrite list display component
-function TodoListBlock({ todos }: { todos: TodoItem[] }) {
-  const completed = todos.filter(t => t.status === 'completed');
-  const open = todos.filter(t => t.status !== 'completed');
-
-  return (
-    <div className="rounded-md border border-border overflow-hidden text-xs font-mono w-full max-w-full bg-zinc-900 dark:bg-zinc-950">
-      {/* Header */}
-      <div className="px-3 py-2 border-b border-border/50 text-zinc-400">
-        Tasks ({completed.length} done, {open.length} open)
-      </div>
-
-      {/* Todo items */}
-      <div className="px-3 py-2 space-y-1">
-        {todos.map((todo, index) => {
-          const isCompleted = todo.status === 'completed';
-          const isInProgress = todo.status === 'in_progress';
-
-          return (
-            <div key={index} className="flex items-start gap-2">
-              {/* Checkbox/status indicator */}
-              <span className={cn(
-                'shrink-0 w-4',
-                isCompleted && 'text-green-500',
-                isInProgress && 'text-yellow-500',
-                !isCompleted && !isInProgress && 'text-zinc-500'
-              )}>
-                {isCompleted ? '✓' : isInProgress ? '⟳' : '☐'}
-              </span>
-
-              {/* Task number and content */}
-              <span className={cn(
-                'flex-1',
-                isCompleted && 'text-zinc-500 line-through',
-                isInProgress && 'text-zinc-100 font-medium',
-                !isCompleted && !isInProgress && 'text-zinc-300'
-              )}>
-                <span className="text-zinc-500">#{index + 1}</span>{' '}
-                {isInProgress ? (todo.activeForm || todo.content) : todo.content}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// Edit tool diff display
-function EditBlock({ input, result, isError }: { input: any; result?: string; isError?: boolean }) {
-  if (!input?.old_string && !input?.new_string) {
-    return null;
-  }
-
-  return (
-    <DiffView
-      oldText={input.old_string || ''}
-      newText={input.new_string || ''}
-      filePath={input.file_path}
-    />
-  );
 }
 
 // Memoized ToolUseBlock - prevents unnecessary re-renders for completed tool calls
@@ -312,7 +49,6 @@ export const ToolUseBlock = memo(function ToolUseBlock({ name, input, result, is
   const isCompleted = !isStreaming && result && !isError;
 
   // Show open button for AskUserQuestion when no result yet (waiting for user response)
-  // This persists across server restarts for unanswered questions
   const showOpenButton = isAskUserQuestion && !result && onOpenPanel;
 
   return (
@@ -355,7 +91,6 @@ export const ToolUseBlock = memo(function ToolUseBlock({ name, input, result, is
               <span className="font-semibold text-foreground/90">{name}</span>
               <span className="text-muted-foreground mx-1">/</span>
               <span className="text-foreground/80 break-all">{displayText}</span>
-              {/* Result summary inline after parens */}
               {resultSummary && (
                 <span className="text-muted-foreground/60 text-xs ml-2">({resultSummary})</span>
               )}
