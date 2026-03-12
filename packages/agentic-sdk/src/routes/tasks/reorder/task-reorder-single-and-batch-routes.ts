@@ -2,8 +2,9 @@
  * Task reorder routes - PUT /api/tasks/reorder (single task) and POST /api/tasks/reorder (batch update)
  */
 import { FastifyInstance } from 'fastify';
+import { VALID_TASK_STATUSES } from '../../../constants/valid-task-statuses';
 
-const VALID_STATUSES = ['todo', 'in_progress', 'in_review', 'done', 'cancelled'];
+const VALID_STATUSES = VALID_TASK_STATUSES as unknown as string[];
 
 export default async function taskReorderSingleAndBatchRoutes(fastify: FastifyInstance) {
   // PUT /api/tasks/reorder - reorder a single task (taskId, status, position)

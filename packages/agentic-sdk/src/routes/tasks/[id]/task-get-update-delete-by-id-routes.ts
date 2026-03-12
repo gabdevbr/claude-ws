@@ -2,8 +2,9 @@
  * Task by ID routes - GET, PUT, PATCH, DELETE /api/tasks/:id
  */
 import { FastifyInstance } from 'fastify';
+import { VALID_TASK_STATUSES } from '../../../constants/valid-task-statuses';
 
-const VALID_STATUSES = ['todo', 'in_progress', 'in_review', 'done', 'cancelled'];
+const VALID_STATUSES = VALID_TASK_STATUSES as unknown as string[];
 
 export default async function taskGetUpdateDeleteByIdRoutes(fastify: FastifyInstance) {
   // GET /api/tasks/:id - get single task by id

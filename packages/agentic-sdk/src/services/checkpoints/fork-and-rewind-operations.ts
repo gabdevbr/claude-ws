@@ -1,11 +1,16 @@
 /**
  * Checkpoint fork and rewind DB operations service.
- * Handles complex DB transactions for forking a task from a checkpoint
- * and rewinding (deleting) attempts/checkpoints after a given checkpoint.
+ * Handles DB transactions for forking a task from a checkpoint and rewinding
+ * (deleting) attempts/checkpoints after a given checkpoint.
+ * Bulk copy helpers are in checkpoint-attempt-copy-helpers.ts.
  */
-import { eq, desc, and, lt, gte, asc } from 'drizzle-orm';
+import { eq, desc, and, gte, asc } from 'drizzle-orm';
 import * as schema from '../../db/database-schema';
 import { generateId } from '../../lib/nanoid-id-generator';
+import {
+  copyAttemptsBeforeCheckpoint,
+  copyCheckpointsBeforeForkPoint,
+} from './checkpoint-attempt-copy-helpers';
 
 export class CheckpointNotFoundError extends Error {
   constructor(message: string) {
@@ -41,12 +46,8 @@ export function createCheckpointOperationsService(db: any) {
       const attempt = await db.select().from(schema.attempts)
         .where(eq(schema.attempts.id, checkpoint.attemptId)).get();
 
-      // Determine position in todo column
       const tasksInTodo = await db.select().from(schema.tasks)
-        .where(and(
-          eq(schema.tasks.projectId, originalTask.projectId),
-          eq(schema.tasks.status, 'todo')
-        ))
+        .where(and(eq(schema.tasks.projectId, originalTask.projectId), eq(schema.tasks.status, 'todo')))
         .orderBy(desc(schema.tasks.position))
         .limit(1);
 
@@ -67,135 +68,20 @@ export function createCheckpointOperationsService(db: any) {
         createdAt: Date.now(),
         updatedAt: Date.now(),
       };
-
       await db.insert(schema.tasks).values(newTask);
 
-      // Get checkpoint attempt timestamp for copy boundary
       const checkpointAttempt = await db.select().from(schema.attempts)
         .where(eq(schema.attempts.id, checkpoint.attemptId)).get();
       const cutoffTime = checkpointAttempt?.createdAt ?? checkpoint.createdAt;
 
-      // Copy attempts before the checkpoint
-      const attemptIdMap = await this.copyAttemptsBeforeCheckpoint(originalTask.id, newTaskId, cutoffTime);
+      const attemptIdMap = await copyAttemptsBeforeCheckpoint(db, originalTask.id, newTaskId, cutoffTime);
+      await copyCheckpointsBeforeForkPoint(db, originalTask.id, newTaskId, checkpoint.createdAt, attemptIdMap);
 
-      // Copy checkpoints before the fork point
-      await this.copyCheckpointsBeforeForkPoint(originalTask.id, newTaskId, checkpoint.createdAt, attemptIdMap);
-
-      return {
-        newTask,
-        newTaskId,
-        originalTask,
-        checkpoint,
-        attempt,
-      };
-    },
-
-    /**
-     * Copy attempts (and their logs) created before the cutoff time from one task to another.
-     * Returns a map of old attempt ID -> new attempt ID.
-     */
-    async copyAttemptsBeforeCheckpoint(
-      originalTaskId: string,
-      newTaskId: string,
-      cutoffTime: number
-    ): Promise<Map<string, string>> {
-      const originalAttempts = await db.select().from(schema.attempts)
-        .where(and(eq(schema.attempts.taskId, originalTaskId), lt(schema.attempts.createdAt, cutoffTime)))
-        .orderBy(asc(schema.attempts.createdAt))
-        .all();
-
-      const attemptIdMap = new Map<string, string>();
-
-      for (const orig of originalAttempts) {
-        const newAttemptId = generateId('atmp');
-        attemptIdMap.set(orig.id, newAttemptId);
-
-        await db.insert(schema.attempts).values({
-          id: newAttemptId,
-          taskId: newTaskId,
-          prompt: orig.prompt,
-          displayPrompt: orig.displayPrompt,
-          status: orig.status,
-          sessionId: orig.sessionId,
-          branch: orig.branch,
-          diffAdditions: orig.diffAdditions,
-          diffDeletions: orig.diffDeletions,
-          totalTokens: orig.totalTokens,
-          inputTokens: orig.inputTokens,
-          outputTokens: orig.outputTokens,
-          cacheCreationTokens: orig.cacheCreationTokens,
-          cacheReadTokens: orig.cacheReadTokens,
-          totalCostUSD: orig.totalCostUSD,
-          numTurns: orig.numTurns,
-          durationMs: orig.durationMs,
-          contextUsed: orig.contextUsed,
-          contextLimit: orig.contextLimit,
-          contextPercentage: orig.contextPercentage,
-          baselineContext: orig.baselineContext,
-          createdAt: orig.createdAt,
-          completedAt: orig.completedAt,
-          outputFormat: orig.outputFormat,
-          outputSchema: orig.outputSchema,
-        });
-
-        // Copy attempt logs
-        const logs = await db.select().from(schema.attemptLogs)
-          .where(eq(schema.attemptLogs.attemptId, orig.id))
-          .orderBy(asc(schema.attemptLogs.createdAt))
-          .all();
-
-        for (const logEntry of logs) {
-          await db.insert(schema.attemptLogs).values({
-            attemptId: newAttemptId,
-            type: logEntry.type,
-            content: logEntry.content,
-            createdAt: logEntry.createdAt,
-          });
-        }
-      }
-
-      return attemptIdMap;
-    },
-
-    /**
-     * Copy checkpoints created before the fork point from one task to another.
-     * Returns count of checkpoints copied.
-     */
-    async copyCheckpointsBeforeForkPoint(
-      originalTaskId: string,
-      newTaskId: string,
-      forkCheckpointCreatedAt: number,
-      attemptIdMap: Map<string, string>
-    ): Promise<number> {
-      const originalCheckpoints = await db.select().from(schema.checkpoints)
-        .where(and(
-          eq(schema.checkpoints.taskId, originalTaskId),
-          lt(schema.checkpoints.createdAt, forkCheckpointCreatedAt)
-        ))
-        .orderBy(asc(schema.checkpoints.createdAt))
-        .all();
-
-      for (const origCp of originalCheckpoints) {
-        const newAttemptId = attemptIdMap.get(origCp.attemptId);
-        if (!newAttemptId) continue;
-        await db.insert(schema.checkpoints).values({
-          id: generateId('chkpt'),
-          taskId: newTaskId,
-          attemptId: newAttemptId,
-          sessionId: origCp.sessionId,
-          gitCommitHash: origCp.gitCommitHash,
-          messageCount: origCp.messageCount,
-          summary: origCp.summary,
-          createdAt: origCp.createdAt,
-        });
-      }
-
-      return originalCheckpoints.length;
+      return { newTask, newTaskId, originalTask, checkpoint, attempt };
     },
 
     /**
      * Fetch a checkpoint and its related task, attempt, and project data.
-     * Used before rewind so callers can perform SDK file rewind with project path.
      */
     async getCheckpointWithRelated(checkpointId: string) {
       const checkpoint = await db.select().from(schema.checkpoints)
@@ -204,13 +90,10 @@ export function createCheckpointOperationsService(db: any) {
 
       const task = await db.select().from(schema.tasks)
         .where(eq(schema.tasks.id, checkpoint.taskId)).get();
-
       const attempt = await db.select().from(schema.attempts)
         .where(eq(schema.attempts.id, checkpoint.attemptId)).get();
-
       const project = task
-        ? await db.select().from(schema.projects)
-            .where(eq(schema.projects.id, task.projectId)).get()
+        ? await db.select().from(schema.projects).where(eq(schema.projects.id, task.projectId)).get()
         : null;
 
       return { checkpoint, task, attempt, project };
@@ -219,7 +102,6 @@ export function createCheckpointOperationsService(db: any) {
     /**
      * Delete the checkpoint's own attempt and all later attempts (with their logs/files),
      * then delete the checkpoint and all later checkpoints for the same task.
-     * Returns counts of deleted items.
      */
     async rewindWithCleanup(checkpointId: string) {
       const checkpoint = await db.select().from(schema.checkpoints)
@@ -228,119 +110,84 @@ export function createCheckpointOperationsService(db: any) {
 
       const task = await db.select().from(schema.tasks)
         .where(eq(schema.tasks.id, checkpoint.taskId)).get();
-
       const attempt = await db.select().from(schema.attempts)
         .where(eq(schema.attempts.id, checkpoint.attemptId)).get();
 
-      // Get later attempts + checkpoint's own attempt
       const laterAttempts = await db.select().from(schema.attempts)
-        .where(and(
-          eq(schema.attempts.taskId, checkpoint.taskId),
-          gte(schema.attempts.createdAt, checkpoint.createdAt)
-        ))
+        .where(and(eq(schema.attempts.taskId, checkpoint.taskId), gte(schema.attempts.createdAt, checkpoint.createdAt)))
         .all();
 
       const attemptIdsToDelete = new Set<string>(laterAttempts.map((a: any) => a.id as string));
       attemptIdsToDelete.add(checkpoint.attemptId as string);
 
-      // Delete attempts and their logs/files
       for (const attemptId of attemptIdsToDelete) {
         await db.delete(schema.attemptLogs).where(eq(schema.attemptLogs.attemptId, attemptId));
         await db.delete(schema.attemptFiles).where(eq(schema.attemptFiles.attemptId, attemptId));
         await db.delete(schema.attempts).where(eq(schema.attempts.id, attemptId));
       }
 
-      // Delete this checkpoint and all after it
       const deletedCheckpoints = await db.delete(schema.checkpoints).where(
-        and(
-          eq(schema.checkpoints.taskId, checkpoint.taskId),
-          gte(schema.checkpoints.createdAt, checkpoint.createdAt)
-        )
+        and(eq(schema.checkpoints.taskId, checkpoint.taskId), gte(schema.checkpoints.createdAt, checkpoint.createdAt))
       ).returning();
 
-      return {
-        checkpoint,
-        task,
-        attempt,
-        deletedAttemptCount: attemptIdsToDelete.size,
-        deletedCheckpointCount: deletedCheckpoints.length,
-      };
+      return { checkpoint, task, attempt, deletedAttemptCount: attemptIdsToDelete.size, deletedCheckpointCount: deletedCheckpoints.length };
     },
 
     /**
      * Full fork orchestration: getRelated → SDK file rewind → DB fork → setRewindState.
-     * Runtime singletons (checkpointManager, sessionManager) injected via deps.
      */
     async forkWithSideEffects(checkpointId: string, deps: SdkRewindDeps) {
-      // Get checkpoint with related data
       const related = await this.getCheckpointWithRelated(checkpointId);
       if (!related) throw new CheckpointNotFoundError('Checkpoint not found');
 
       const { checkpoint, task: originalTask, attempt, project } = related;
       if (!originalTask) throw new CheckpointNotFoundError('Original task not found');
 
-      // Attempt SDK file rewind if checkpoint UUID exists
       let sdkRewindResult: { success: boolean; error?: string } | null = null;
       if (checkpoint.gitCommitHash && checkpoint.sessionId && project) {
         sdkRewindResult = await deps.attemptSdkFileRewind(checkpoint, project);
       }
 
-      // Fork DB ops (creates new task, copies attempts/checkpoints)
       const { newTask, newTaskId } = await this.fork(checkpointId);
 
-      // Set rewind state so the new task's first attempt resumes from the checkpoint
       if (checkpoint.gitCommitHash) {
         await deps.setRewindState(newTaskId, checkpoint.sessionId, checkpoint.gitCommitHash);
       }
 
       return {
-        success: true,
-        task: newTask,
-        taskId: newTaskId,
-        originalTaskId: originalTask.id,
-        sessionId: checkpoint.sessionId,
-        messageUuid: checkpoint.gitCommitHash,
-        attemptId: checkpoint.attemptId,
-        attemptPrompt: attempt?.prompt || null,
-        sdkRewind: sdkRewindResult,
+        success: true, task: newTask, taskId: newTaskId,
+        originalTaskId: originalTask.id, sessionId: checkpoint.sessionId,
+        messageUuid: checkpoint.gitCommitHash, attemptId: checkpoint.attemptId,
+        attemptPrompt: attempt?.prompt || null, sdkRewind: sdkRewindResult,
         conversationForked: !!checkpoint.gitCommitHash,
       };
     },
 
     /**
      * Full rewind orchestration: getRelated → SDK file rewind → DB cleanup → setRewindState.
-     * Runtime singletons (checkpointManager, sessionManager) injected via deps.
      */
     async rewindWithSideEffects(checkpointId: string, rewindFiles: boolean, deps: SdkRewindDeps) {
-      // Get checkpoint with related data (for SDK rewind + response)
       const related = await this.getCheckpointWithRelated(checkpointId);
       if (!related) throw new CheckpointNotFoundError('Checkpoint not found');
 
       const { checkpoint, attempt, project } = related;
 
-      // Attempt SDK file rewind if requested
       let sdkRewindResult: { success: boolean; error?: string } | null = null;
       if (rewindFiles && checkpoint.gitCommitHash && checkpoint.sessionId && project) {
         sdkRewindResult = await deps.attemptSdkFileRewind(checkpoint, project);
       }
 
-      // Delete checkpoint's attempt + all later attempts/checkpoints
       await this.rewindWithCleanup(checkpointId);
 
-      // Set rewind state on task for session resumption
       if (checkpoint.gitCommitHash) {
         await deps.setRewindState(checkpoint.taskId, checkpoint.sessionId, checkpoint.gitCommitHash);
       }
 
       return {
-        success: true,
-        sessionId: checkpoint.sessionId,
-        messageUuid: checkpoint.gitCommitHash,
-        taskId: checkpoint.taskId,
-        attemptId: checkpoint.attemptId,
-        attemptPrompt: attempt?.prompt || null,
-        sdkRewind: sdkRewindResult,
-        conversationRewound: !!checkpoint.gitCommitHash,
+        success: true, sessionId: checkpoint.sessionId,
+        messageUuid: checkpoint.gitCommitHash, taskId: checkpoint.taskId,
+        attemptId: checkpoint.attemptId, attemptPrompt: attempt?.prompt || null,
+        sdkRewind: sdkRewindResult, conversationRewound: !!checkpoint.gitCommitHash,
       };
     },
   };

@@ -5,8 +5,10 @@
 import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
+import { SEARCH_EXCLUDED_DIRS } from '../../constants/excluded-directory-names';
 
-export const EXCLUDED_DIRS = ['node_modules', '.git', '.next', 'dist', 'build', '.turbo', '__pycache__', '.cache'];
+/** Extended exclusion list for search — re-exported from shared constants for backward compatibility */
+export const EXCLUDED_DIRS: string[] = [...SEARCH_EXCLUDED_DIRS];
 export const EXCLUDED_FILES = ['.DS_Store', 'Thumbs.db'];
 export const BINARY_EXTENSIONS = [
   '.png', '.jpg', '.jpeg', '.gif', '.ico', '.webp', '.svg',

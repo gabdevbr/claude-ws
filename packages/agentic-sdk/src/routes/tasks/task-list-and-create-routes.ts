@@ -2,8 +2,9 @@
  * Task collection routes - GET /api/tasks (list with filters) and POST /api/tasks (create)
  */
 import { FastifyInstance } from 'fastify';
+import { VALID_TASK_STATUSES } from '../../constants/valid-task-statuses';
 
-const VALID_STATUSES = ['todo', 'in_progress', 'in_review', 'done', 'cancelled'];
+const VALID_STATUSES = VALID_TASK_STATUSES as unknown as string[];
 
 export default async function taskListAndCreateRoutes(fastify: FastifyInstance) {
   // GET /api/tasks - list tasks, filtered by projectId/projectIds and/or status

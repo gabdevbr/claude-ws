@@ -6,10 +6,17 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-
-const execFileAsync = promisify(execFile);
+import { getGitStatusMap, type GitStatusResult } from './git-status-map-reader';
+import {
+  LANGUAGE_MAP,
+  BINARY_EXTENSIONS,
+  EXCLUDED_DIRS,
+  EXCLUDED_FILES,
+  MAX_FILE_SIZE,
+  CONTENT_TYPE_MAP,
+  getContentTypeForExtension,
+  detectLanguage,
+} from './mime-and-language-constants';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -39,125 +46,10 @@ export interface FileContentResult {
   mtime: number;
 }
 
-interface GitStatusResult {
-  fileStatus: Map<string, GitFileStatusCode>;
-  untrackedDirs: string[];
-}
+// All constants (LANGUAGE_MAP, BINARY_EXTENSIONS, EXCLUDED_DIRS, EXCLUDED_FILES,
+// MAX_FILE_SIZE, CONTENT_TYPE_MAP) and helpers (getContentTypeForExtension, detectLanguage)
+// are imported from mime-and-language-constants.ts above.
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-// Language mapping by extension (must match CodeMirror language keys)
-const LANGUAGE_MAP: Record<string, string | null> = {
-  '.js': 'javascript', '.jsx': 'jsx', '.ts': 'typescript', '.tsx': 'tsx',
-  '.mjs': 'javascript', '.cjs': 'javascript',
-  '.html': 'html', '.htm': 'html', '.css': 'css', '.scss': 'css',
-  '.sass': 'css', '.less': 'css',
-  '.json': 'json', '.yaml': 'yaml', '.yml': 'yaml', '.xml': 'xml',
-  '.toml': null, '.env': null, '.gitignore': null, '.dockerignore': null,
-  '.md': 'markdown', '.mdx': 'markdown',
-  '.sh': null, '.bash': null, '.zsh': null,
-  '.py': 'python', '.go': null, '.rs': 'rust', '.sql': 'sql',
-  '.php': 'php', '.java': 'java',
-  '.c': 'cpp', '.cpp': 'cpp', '.cc': 'cpp', '.h': 'cpp', '.hpp': 'cpp',
-  '.txt': null, '.log': null,
-};
-
-const BINARY_EXTENSIONS = [
-  '.png', '.jpg', '.jpeg', '.gif', '.ico', '.webp', '.svg',
-  '.pdf', '.doc', '.docx', '.xls', '.xlsx',
-  '.zip', '.tar', '.gz', '.rar',
-  '.exe', '.dll', '.so', '.dylib',
-  '.woff', '.woff2', '.ttf', '.eot',
-  '.mp3', '.mp4', '.wav', '.avi', '.mov',
-];
-
-const EXCLUDED_DIRS = ['node_modules', '.git', '.next', 'dist', 'build', '.turbo'];
-const EXCLUDED_FILES = ['.DS_Store', 'Thumbs.db'];
-
-// Max file size: 10MB
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
-
-// ---------------------------------------------------------------------------
-// Canonical MIME type mapping (self-contained, no @/ imports)
-// ---------------------------------------------------------------------------
-
-const CONTENT_TYPE_MAP: Record<string, string> = {
-  json: 'application/json', xml: 'application/xml', yaml: 'text/yaml',
-  yml: 'text/yaml', csv: 'text/csv', txt: 'text/plain',
-  html: 'text/html', htm: 'text/html', css: 'text/css',
-  js: 'application/javascript', jsx: 'application/javascript',
-  mjs: 'application/javascript', cjs: 'application/javascript',
-  ts: 'application/typescript', tsx: 'application/typescript',
-  md: 'text/markdown', mdx: 'text/markdown',
-  scss: 'text/css', sass: 'text/css', less: 'text/css',
-  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  xls: 'application/vnd.ms-excel',
-  docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  doc: 'application/msword', pdf: 'application/pdf',
-  zip: 'application/zip', tar: 'application/x-tar', gz: 'application/gzip',
-  rar: 'application/vnd.rar',
-  exe: 'application/vnd.microsoft.portable-executable',
-  dll: 'application/vnd.microsoft.portable-executable',
-  so: 'application/octet-stream', dylib: 'application/octet-stream',
-  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
-  gif: 'image/gif', svg: 'image/svg+xml', webp: 'image/webp',
-  ico: 'image/x-icon', woff: 'font/woff', woff2: 'font/woff2',
-  ttf: 'font/ttf', eot: 'application/vnd.ms-fontobject',
-  mp4: 'video/mp4', webm: 'video/webm', avi: 'video/x-msvideo',
-  mov: 'video/quicktime', mp3: 'audio/mpeg', wav: 'audio/wav',
-};
-
-function getContentTypeForExtension(ext: string): string {
-  const key = (ext.startsWith('.') ? ext.slice(1) : ext).toLowerCase();
-  return CONTENT_TYPE_MAP[key] || 'application/octet-stream';
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function detectLanguage(filePath: string): string | null {
-  const fileName = path.basename(filePath);
-  const specialFiles: Record<string, string | null> = {
-    'Dockerfile': null, 'Makefile': null,
-    '.eslintrc': 'json', '.prettierrc': 'json',
-    'tsconfig.json': 'json', 'package.json': 'json',
-  };
-  return specialFiles[fileName] !== undefined ? specialFiles[fileName] : null;
-}
-
-async function getGitStatusMap(cwd: string): Promise<GitStatusResult> {
-  const fileStatus = new Map<string, GitFileStatusCode>();
-  const untrackedDirs: string[] = [];
-  try {
-    const { stdout } = await execFileAsync('git', ['status', '--porcelain'], { cwd, timeout: 5000 });
-    for (const line of stdout.trim().split('\n')) {
-      if (!line || line.length < 3) continue;
-      const indexStatus = line[0];
-      const worktreeStatus = line[1];
-      let filePath = line.slice(3).trim();
-      if (filePath.includes(' -> ')) filePath = filePath.split(' -> ')[1];
-      if (indexStatus === '?' && worktreeStatus === '?') {
-        if (filePath.endsWith('/')) untrackedDirs.push(filePath.slice(0, -1));
-        else fileStatus.set(filePath, 'U');
-        continue;
-      }
-      const status = indexStatus !== ' ' ? indexStatus : worktreeStatus;
-      if (status === 'M' || status === 'A' || status === 'D' || status === 'R') {
-        fileStatus.set(filePath, status as GitFileStatusCode);
-      } else if (status === 'U') {
-        fileStatus.set(filePath, 'U');
-      } else {
-        fileStatus.set(filePath, 'M');
-      }
-    }
-  } catch {
-    // Not a git repo or git command failed
-  }
-  return { fileStatus, untrackedDirs };
-}
 
 function buildFileTree(
   dirPath: string, basePath: string, maxDepth: number,

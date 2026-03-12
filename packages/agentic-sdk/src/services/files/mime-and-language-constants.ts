@@ -3,6 +3,7 @@
  * Self-contained: no Next.js or @/ imports.
  */
 import path from 'path';
+import { EXCLUDED_DIRS as _EXCLUDED_DIRS } from '../../constants/excluded-directory-names';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -33,7 +34,8 @@ export const BINARY_EXTENSIONS = [
   '.mp3', '.mp4', '.wav', '.avi', '.mov',
 ];
 
-export const EXCLUDED_DIRS = ['node_modules', '.git', '.next', 'dist', 'build', '.turbo'];
+/** Re-exported from shared constants for backward compatibility */
+export const EXCLUDED_DIRS: string[] = [..._EXCLUDED_DIRS];
 export const EXCLUDED_FILES = ['.DS_Store', 'Thumbs.db'];
 
 // Max file size: 10MB
