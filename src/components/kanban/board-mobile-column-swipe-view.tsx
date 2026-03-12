@@ -11,6 +11,7 @@ import { BoardDragOverlay } from '@/components/kanban/board-drag-overlay';
 import { useTaskStore } from '@/stores/task-store';
 import { leftEdgeCollisionDetector } from '@/components/kanban/board-collision-detector';
 import { useBoardMobileSwipeGesture } from '@/components/kanban/use-board-mobile-swipe-gesture';
+import { ChatHistoryMatch } from '@/hooks/use-chat-history-search';
 import { cn } from '@/lib/utils';
 
 interface BoardMobileColumnSwipeViewProps {
@@ -23,7 +24,7 @@ interface BoardMobileColumnSwipeViewProps {
   activeTask: Task | null;
   isMobile: boolean;
   searchQuery: string;
-  chatHistoryMatches: Set<string>;
+  chatHistoryMatches: Map<string, ChatHistoryMatch>;
   onCreateTask?: () => void;
   onMobileActiveColumnChange: (column: TaskStatus) => void;
   onDragStart: (event: DragStartEvent) => void;
