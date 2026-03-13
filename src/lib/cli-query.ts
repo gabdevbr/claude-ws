@@ -26,16 +26,21 @@ export function findClaudePath(): string | undefined {
   const isWindows = process.platform === 'win32';
   const home = process.env.USERPROFILE || process.env.HOME || '';
 
+  // Local SDK cli.js (works as executable via shebang)
+  const sdkCli = join(process.cwd(), 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'cli.js');
+
   const candidates = isWindows
     ? [
         join(home, '.local', 'bin', 'claude.exe'),
         join(home, 'AppData', 'Roaming', 'npm', 'claude.cmd'),
         join(home, 'AppData', 'Local', 'Programs', 'claude', 'claude.exe'),
+        sdkCli,
       ]
     : [
         `/home/${process.env.USER || 'user'}/.local/bin/claude`,
         '/usr/local/bin/claude',
         '/opt/homebrew/bin/claude',
+        sdkCli,
       ];
 
   return candidates.find(p => existsSync(p));
