@@ -30,6 +30,8 @@ export function useBoardMobileSwipeGesture({
   onColumnChange,
 }: UseBoardMobileSwipeGestureProps): UseBoardMobileSwipeGestureReturn {
   const touchStartRef = useRef<{ x: number; y: number } | null>(null);
+  // Axis lock: null = undecided, 'horizontal' = swiping columns, 'vertical' = scrolling tasks
+  const axisLockRef = useRef<'horizontal' | 'vertical' | null>(null);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -45,6 +47,7 @@ export function useBoardMobileSwipeGesture({
     }
 
     touchStartRef.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    axisLockRef.current = null;
     setSwipeOffset(0);
     setIsDragging(true);
   };
@@ -54,10 +57,20 @@ export function useBoardMobileSwipeGesture({
     if (!touchStartRef.current || !isDragging) return;
 
     const currentX = e.touches[0].clientX;
+    const currentY = e.touches[0].clientY;
     const dx = currentX - touchStartRef.current.x;
+    const dy = currentY - touchStartRef.current.y;
 
-    // Calculate swipe offset with resistance
-    // Limit the offset to simulate snap-back at edges
+    // Determine axis lock after a small movement threshold (8px)
+    if (axisLockRef.current === null) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      axisLockRef.current = Math.abs(dx) >= Math.abs(dy) ? 'horizontal' : 'vertical';
+    }
+
+    // Vertical scroll locked — let browser handle native scroll, skip horizontal swipe
+    if (axisLockRef.current === 'vertical') return;
+
+    // Horizontal swipe locked — calculate offset with resistance
     const maxOffset = window.innerWidth * 0.4;
     let newOffset = dx;
 
@@ -76,16 +89,22 @@ export function useBoardMobileSwipeGesture({
       return;
     }
     const dx = e.changedTouches[0].clientX - touchStartRef.current.x;
-    const dy = e.changedTouches[0].clientY - touchStartRef.current.y;
+    const lockedAxis = axisLockRef.current;
     touchStartRef.current = null;
+    axisLockRef.current = null;
     setIsDragging(false);
+
+    // If gesture was vertical or undecided, just reset — no column transition
+    if (lockedAxis !== 'horizontal') {
+      setSwipeOffset(0);
+      return;
+    }
 
     const currentIndex = visibleColumnIds.indexOf(mobileActiveColumn);
     const threshold = window.innerWidth * 0.2; // 20% of screen width to trigger column change
 
-    // Only trigger if horizontal swipe is dominant and exceeds threshold
-    if (Math.abs(dx) < threshold || Math.abs(dy) > Math.abs(dx)) {
-      // Animate back to original position
+    if (Math.abs(dx) < threshold) {
+      // Didn't swipe far enough — animate back
       setSwipeOffset(0);
       return;
     }

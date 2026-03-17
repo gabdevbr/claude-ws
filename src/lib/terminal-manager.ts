@@ -9,17 +9,26 @@
  */
 
 import { EventEmitter } from 'events';
-import * as pty from '@homebridge/node-pty-prebuilt-multiarch';
 import { nanoid } from 'nanoid';
 import { detectShell } from './terminal-shell-detect';
 import { createLogger } from './logger';
 
 const log = createLogger('TerminalManager');
 
+// Lazy-load node-pty — native module that may not compile on all platforms (e.g. Windows)
+type NodePty = typeof import('@homebridge/node-pty-prebuilt-multiarch');
+type IPty = import('@homebridge/node-pty-prebuilt-multiarch').IPty;
+let pty: NodePty | null = null;
+try {
+  pty = require('@homebridge/node-pty-prebuilt-multiarch');
+} catch {
+  log.warn('node-pty not available — interactive terminal feature disabled');
+}
+
 export interface TerminalSession {
   id: string;
   projectId: string;
-  ptyProcess: pty.IPty;
+  ptyProcess: IPty;
   cols: number;
   rows: number;
   cwd: string;
@@ -47,7 +56,14 @@ class TerminalManager extends EventEmitter {
     process.on('exit', () => this.destroyAll());
   }
 
+  get isAvailable(): boolean {
+    return pty !== null;
+  }
+
   create(options: TerminalCreateOptions): string {
+    if (!pty) {
+      throw new Error('Interactive terminals unavailable — node-pty failed to load on this platform');
+    }
     const { projectId, cwd, cols = 80, rows = 24, shell } = options;
     const terminalId = nanoid();
 
