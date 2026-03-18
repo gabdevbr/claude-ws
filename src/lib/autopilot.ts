@@ -102,6 +102,10 @@ export class AutopilotManager {
     this.phase.set(projectId, 'idle');
 
     // Clean up context
+    const ctx = this.taskContexts.get(projectId);
+    if (ctx?.attemptId) {
+      this.restartCommandAttempts.delete(ctx.attemptId);
+    }
     this.taskContexts.delete(projectId);
 
     // Remove from appSettings
