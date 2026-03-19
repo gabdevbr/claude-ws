@@ -6,10 +6,16 @@ import { createLogger } from '@/lib/logger';
 
 const log = createLogger('ModelStore');
 
+const LAST_USED_MODEL_KEY = 'claudews-last-used-model';
+const LAST_USED_PROVIDER_KEY = 'claudews-last-used-provider';
+
 interface ModelStore {
   // Global default model (from env/cached/default)
   defaultModel: string;
   defaultProvider: string;
+  // Last used model (persisted across sessions via localStorage)
+  lastUsedModel: string | null;
+  lastUsedProvider: string | null;
   // Per-task model overrides
   taskModels: Record<string, string>;
   taskProviders: Record<string, string>;
@@ -26,6 +32,8 @@ interface ModelStore {
 export const useModelStore = create<ModelStore>((set, get) => ({
   defaultModel: DEFAULT_MODEL_ID,
   defaultProvider: 'claude-cli',
+  lastUsedModel: typeof window !== 'undefined' ? localStorage.getItem(LAST_USED_MODEL_KEY) : null,
+  lastUsedProvider: typeof window !== 'undefined' ? localStorage.getItem(LAST_USED_PROVIDER_KEY) : null,
   taskModels: {},
   taskProviders: {},
   availableModels: [],
@@ -65,6 +73,13 @@ export const useModelStore = create<ModelStore>((set, get) => ({
     const { taskModels, taskProviders, availableModels } = get();
     const model = availableModels.find(m => m.id === modelId);
     const provider = model?.provider || 'claude-cli';
+
+    // Always persist as last-used model for new task creation
+    try {
+      localStorage.setItem(LAST_USED_MODEL_KEY, modelId);
+      localStorage.setItem(LAST_USED_PROVIDER_KEY, provider);
+    } catch { /* localStorage unavailable */ }
+    set({ lastUsedModel: modelId, lastUsedProvider: provider });
 
     if (taskId) {
       // Update local state for this task
@@ -129,9 +144,9 @@ export const useModelStore = create<ModelStore>((set, get) => ({
 
   // Get model for a specific task
   getTaskModel: (taskId: string, taskLastModel?: string | null) => {
-    const { taskModels, defaultModel, availableModels } = get();
-    // Priority: local state > task.lastModel > default
-    const candidate = taskModels[taskId] || taskLastModel || defaultModel;
+    const { taskModels, defaultModel, availableModels, lastUsedModel } = get();
+    // Priority: local state > task.lastModel > last used > default
+    const candidate = taskModels[taskId] || taskLastModel || lastUsedModel || defaultModel;
 
     // Validate that the model exists in available models
     // If not (due to provider change), fall back to default
@@ -147,14 +162,14 @@ export const useModelStore = create<ModelStore>((set, get) => ({
 
   // Get provider for a specific task
   getTaskProvider: (taskId: string, taskLastProvider?: string | null) => {
-    const { taskProviders, defaultProvider } = get();
-    return taskProviders[taskId] || taskLastProvider || defaultProvider || 'claude-cli';
+    const { taskProviders, defaultProvider, lastUsedProvider } = get();
+    return taskProviders[taskId] || taskLastProvider || lastUsedProvider || defaultProvider || 'claude-cli';
   },
 
   getShortName: (taskId?: string, taskLastModel?: string | null) => {
-    const { taskModels, defaultModel, availableModels } = get();
+    const { taskModels, defaultModel, availableModels, lastUsedModel } = get();
     let model = taskId
-      ? taskModels[taskId] || taskLastModel || defaultModel
+      ? taskModels[taskId] || taskLastModel || lastUsedModel || defaultModel
       : defaultModel;
 
     // Validate that the model exists in available models
