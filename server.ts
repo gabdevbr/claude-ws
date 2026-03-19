@@ -131,7 +131,10 @@ app.prepare().then(async () => {
   const autopilotWorker = new AutopilotWorker({
     db, schema, io, agentManager, autopilotManager, sessionManager,
   });
-  await autopilotWorker.sweepOnStartup();
+  // Run startup sweep in background so AI validation doesn't block server startup
+  autopilotWorker.sweepOnStartup().catch((err) =>
+    log.error({ error: err }, 'Startup sweep failed'),
+  );
   autopilotWorker.start();
 
   // Disconnect cleanup timers - keyed by attemptId
