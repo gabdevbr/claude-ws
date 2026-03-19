@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import { Loader2 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { RunningDots, useRandomStatusVerb } from '@/components/ui/running-dots';
+import { RunningDots, useRandomStatusVerb, useRotatingStatusVerb } from '@/components/ui/running-dots';
 import { PendingQuestionIndicator } from '@/components/task/pending-question-indicator';
 import { AuthErrorMessage } from '@/components/auth/auth-error-message';
 import { cn } from '@/lib/utils';
@@ -16,6 +16,7 @@ import { renderMessage } from './conversation-view-content-block-renderer';
 import { ConversationHistoricalUserTurn } from './conversation-view-historical-user-turn';
 import { ConversationHistoricalAssistantTurn } from './conversation-view-historical-assistant-turn';
 import { ConversationViewStreamingPromptBubble } from './conversation-view-streaming-prompt-bubble';
+import { useStreamingIdleDetector } from './use-streaming-idle-detector';
 
 interface ConversationViewProps {
   taskId: string;
@@ -49,6 +50,8 @@ export function ConversationView({
   const [historicalTurns, setHistoricalTurns] = useState<ConversationTurn[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const statusVerb = useRandomStatusVerb();
+  const isStreamingIdle = useStreamingIdleDetector(isRunning, currentMessages);
+  const idleVerb = useRotatingStatusVerb(isStreamingIdle);
   const t = useTranslations('chat');
 
   const localLastFetchedTaskIdRef = useRef<string | null>(null);
@@ -156,6 +159,13 @@ export function ConversationView({
           <div className="flex items-center gap-2 text-muted-foreground text-sm py-1">
             <RunningDots />
             <span className="font-mono text-[14px]" style={{ color: '#b9664a' }}>{statusVerb}...</span>
+          </div>
+        )}
+
+        {isStreamingIdle && hasVisibleContent(currentMessages) && (
+          <div className="flex items-center gap-2 text-muted-foreground text-sm py-1 animate-in fade-in duration-300">
+            <RunningDots />
+            <span className="font-mono text-[14px] transition-opacity duration-300" style={{ color: '#b9664a' }}>{idleVerb}...</span>
           </div>
         )}
 

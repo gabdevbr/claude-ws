@@ -43,6 +43,32 @@ export function useRandomStatusVerb(): string {
     return useMemo(() => getRandomStatusVerb(), []);
 }
 
+/**
+ * Hook that rotates through random status verbs at a set interval.
+ * Use this for idle indicators that need to feel "alive".
+ * Only rotates when `active` is true; pauses and resets when inactive.
+ */
+export function useRotatingStatusVerb(active: boolean, intervalMs: number = 3000): string {
+    const [verb, setVerb] = useState(() => getRandomStatusVerb());
+
+    useEffect(() => {
+        if (!active) return;
+        // Pick a fresh verb immediately when becoming active
+        setVerb(getRandomStatusVerb());
+        const timer = setInterval(() => {
+            setVerb((prev) => {
+                let next = getRandomStatusVerb();
+                // Avoid showing the same verb twice in a row
+                while (next === prev) next = getRandomStatusVerb();
+                return next;
+            });
+        }, intervalMs);
+        return () => clearInterval(timer);
+    }, [active, intervalMs]);
+
+    return verb;
+}
+
 // Default spinner color
 const SPINNER_COLOR = '#b9664a';
 
