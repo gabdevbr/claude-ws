@@ -129,7 +129,18 @@ export class AgentProvider extends EventEmitter {
   }
 
   resolveModel(modelId: string): string {
-    return MODEL_ALIAS_MAP[modelId] || modelId;
+    // First check if it's a full Claude model ID → SDK alias
+    const alias = MODEL_ALIAS_MAP[modelId];
+    if (alias) return alias;
+
+    // If custom tier models are configured, map aliases to custom model IDs
+    // e.g. "opus" → "glm-4.7", "haiku" → "glm-4.5-air"
+    const tierMap: Record<string, string | undefined> = {
+      opus: this.config.anthropicDefaultOpusModel,
+      sonnet: this.config.anthropicDefaultSonnetModel,
+      haiku: this.config.anthropicDefaultHaikuModel,
+    };
+    return tierMap[modelId] || modelId;
   }
 
   async start(options: {

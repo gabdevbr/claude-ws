@@ -47,8 +47,17 @@ export function spawnCLIProcess(opts: SpawnCLIOptions): ChildProcess {
 
   log.info({ claudePath, argsCount: args.length, attemptId }, 'Spawning CLI process');
 
-  // Strip SDK-specific env vars so CLI uses its own auth, not the custom endpoint
-  const { ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL, ...cleanEnv } = process.env;
+  // Strip SDK-specific env vars and model env vars so CLI uses its own auth
+  // and model selection logic (e.g. haiku for Explore, opus for main session).
+  // The --model flag sets the main session model; CLI handles subagent models automatically.
+  const {
+    ANTHROPIC_AUTH_TOKEN, ANTHROPIC_BASE_URL,
+    ANTHROPIC_MODEL: _envModel,
+    ANTHROPIC_DEFAULT_OPUS_MODEL: _envOpus,
+    ANTHROPIC_DEFAULT_SONNET_MODEL: _envSonnet,
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: _envHaiku,
+    ...cleanEnv
+  } = process.env;
 
   return spawn(claudePath, args, {
     cwd: normalizedProjectPath,
