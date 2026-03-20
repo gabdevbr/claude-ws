@@ -18,6 +18,7 @@ interface AutopilotDeps {
 
 interface AutopilotStatus {
   enabled: boolean;
+  allowAskUser: boolean;
   phase: 'idle' | 'planning' | 'processing';
   currentTaskId: string | null;
   processedCount: number;
@@ -39,6 +40,9 @@ interface TaskContext {
 export class AutopilotManager {
   /** Workspace-wide autopilot toggle — default enabled */
   private _enabled = true;
+
+  /** Allow AskUserQuestion tool in autopilot mode — default false */
+  private _allowAskUser = false;
 
   private retryCounts = new Map<string, number>();
   private currentTaskId = new Map<string, string>();
@@ -68,6 +72,35 @@ export class AutopilotManager {
   /** Check if autopilot is enabled (workspace-wide) */
   isEnabled(): boolean {
     return this._enabled;
+  }
+
+  /** Check if AskUserQuestion is allowed in autopilot mode */
+  isAllowAskUser(): boolean {
+    return this._allowAskUser;
+  }
+
+  async enableAskUser(db: any, schema: any): Promise<void> {
+    this._allowAskUser = true;
+    await db
+      .insert(schema.appSettings)
+      .values({ key: 'autopilot_allow_ask_user', value: 'true', updatedAt: Date.now() })
+      .onConflictDoUpdate({
+        target: schema.appSettings.key,
+        set: { value: 'true', updatedAt: Date.now() },
+      });
+    log.info('Autopilot: AskUserQuestion enabled');
+  }
+
+  async disableAskUser(db: any, schema: any): Promise<void> {
+    this._allowAskUser = false;
+    await db
+      .insert(schema.appSettings)
+      .values({ key: 'autopilot_allow_ask_user', value: 'false', updatedAt: Date.now() })
+      .onConflictDoUpdate({
+        target: schema.appSettings.key,
+        set: { value: 'false', updatedAt: Date.now() },
+      });
+    log.info('Autopilot: AskUserQuestion disabled');
   }
 
   /** Set runtime deps (io, agentManager, sessionManager) — called once from server.ts */
@@ -142,6 +175,18 @@ export class AutopilotManager {
         log.info('No autopilot setting in DB, using default: enabled');
       }
 
+      // Restore allowAskUser setting
+      const askUserSetting = await db
+        .select()
+        .from(schema.appSettings)
+        .where(eq(schema.appSettings.key, 'autopilot_allow_ask_user'))
+        .limit(1);
+
+      if (askUserSetting.length > 0) {
+        this._allowAskUser = askUserSetting[0].value === 'true';
+        log.info({ allowAskUser: this._allowAskUser }, 'Restored autopilot allowAskUser from DB');
+      }
+
       // Clean up old per-project keys (migration)
       const allSettings = await db.select().from(schema.appSettings);
       for (const s of allSettings) {
@@ -171,6 +216,8 @@ export class AutopilotManager {
       questions: unknown[];
     }) => {
       if (!this._enabled) return;
+      // When allowAskUser is on, let questions through to the user
+      if (this._allowAskUser) return;
 
       const projectId = this.attemptToProject.get(attemptId);
       if (!projectId) return;
@@ -669,10 +716,13 @@ Do not include any other text, just the JSON array.`;
       ? `\nRemaining tasks after this: ${ctx.allTodoTitles.join(', ')}`
       : '';
 
+    const askUserLine = this._allowAskUser
+      ? ''
+      : '\n- Do NOT use AskUserQuestion tool. There is no human available to answer.';
+
     const prompt = `${basePrompt}
 
-[AUTOPILOT MODE] You are running in fully autonomous mode. Important rules:
-- Do NOT use AskUserQuestion tool. There is no human available to answer.
+[AUTOPILOT MODE] You are running in fully autonomous mode. Important rules:${askUserLine}
 - Make all decisions yourself based on the task description.
 - If something is ambiguous, choose the most reasonable approach and proceed.
 - If you need to pick between options, choose what best fits the task goal.
@@ -759,6 +809,7 @@ Do not include any other text, just the JSON array.`;
 
     return {
       enabled: this._enabled,
+      allowAskUser: this._allowAskUser,
       phase: aggregatedPhase,
       currentTaskId: currentTask,
       processedCount: totalProcessed,

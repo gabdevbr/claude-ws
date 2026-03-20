@@ -124,7 +124,10 @@
     "autopilotRetrying": "Retrying ({count}/{max})",
     "autopilotSkipped": "Skipped (failed {max}x): {title}",
     "autopilotIdle": "All tasks processed",
-    "autopilotProgress": "{processed}/{total} tasks done"
+    "autopilotProgress": "{processed}/{total} tasks done",
+    "askUserOn": "Ask User: On",
+    "askUserOff": "Ask User: Off",
+    "askUserDescription": "When enabled, autopilot agents can ask you questions for clarification instead of making all decisions autonomously."
   },
   "task": {
     "title": "Title",

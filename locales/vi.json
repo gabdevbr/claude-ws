@@ -124,7 +124,10 @@
     "autopilotRetrying": "Thử lại ({count}/{max})",
     "autopilotSkipped": "Bỏ qua (lỗi {max} lần): {title}",
     "autopilotIdle": "Đã xử lý xong tất cả",
-    "autopilotProgress": "{processed}/{total} nhiệm vụ xong"
+    "autopilotProgress": "{processed}/{total} nhiệm vụ xong",
+    "askUserOn": "Hỏi người dùng: Bật",
+    "askUserOff": "Hỏi người dùng: Tắt",
+    "askUserDescription": "Khi bật, agent tự động có thể hỏi bạn để làm rõ thay vì tự quyết định mọi thứ."
   },
   "task": {
     "title": "Tiêu đề",

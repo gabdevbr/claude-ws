@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useTheme } from 'next-themes';
-import { Plus, Settings, Package, X, Sun, Moon, LogOut, Globe, Brain, Zap, Columns3, ChevronDown, ChevronRight, Info } from 'lucide-react';
+import { Plus, Settings, Package, X, Sun, Moon, LogOut, Globe, Brain, Zap, Columns3, ChevronDown, ChevronRight, Info, MessageCircleQuestion } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useRightSidebarStore } from '@/stores/right-sidebar-store';
@@ -46,11 +46,13 @@ export function RightSidebar({ projectId, onCreateTask, className }: RightSideba
   const { setOpen: setSettingsOpen } = useSettingsUIStore();
   const { setWizardOpen, status } = useTunnelStore();
   const { theme, setTheme, resolvedTheme } = useTheme();
-  const { enabled: autopilotEnabled, phase: autopilotPhase, toggle: toggleAutopilot } = useAutopilot();
+  const { enabled: autopilotEnabled, allowAskUser, phase: autopilotPhase, toggle: toggleAutopilot, toggleAllowAskUser } = useAutopilot();
   const { hiddenColumns, toggleColumn } = usePanelLayoutStore();
   const [mounted, setMounted] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showToggleColumns, setShowToggleColumns] = useState(false);
+  const [autopilotTipOpen, setAutopilotTipOpen] = useState(false);
+  const [askUserTipOpen, setAskUserTipOpen] = useState(false);
 
   // Prevent hydration mismatch
   useEffect(() => {
@@ -89,7 +91,7 @@ export function RightSidebar({ projectId, onCreateTask, className }: RightSideba
       <div
         className={cn(
           'fixed right-0 top-0 h-full w-64 bg-background border-l shadow-lg z-50',
-          'flex flex-col p-4 gap-2',
+          'flex flex-col p-4 gap-2 [&_button]:cursor-pointer',
           className
         )}
       >
@@ -145,14 +147,14 @@ export function RightSidebar({ projectId, onCreateTask, className }: RightSideba
             {autopilotEnabled ? tKanban('autopilotOn') : tKanban('autopilot')}
           </Button>
           <TooltipProvider>
-            <Tooltip>
+            <Tooltip open={autopilotTipOpen} onOpenChange={setAutopilotTipOpen}>
               <TooltipTrigger asChild>
                 <span
                   className={cn(
                     'absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex items-center justify-center h-6 w-6 rounded-full cursor-help transition-colors',
                     autopilotEnabled ? 'text-white/70 hover:text-white' : 'text-muted-foreground hover:text-foreground'
                   )}
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={(e) => { e.stopPropagation(); setAutopilotTipOpen((v) => !v); }}
                 >
                   <Info className="h-3.5 w-3.5" />
                 </span>
@@ -163,6 +165,38 @@ export function RightSidebar({ projectId, onCreateTask, className }: RightSideba
             </Tooltip>
           </TooltipProvider>
         </div>
+
+        {/* AskUserQuestion sub-toggle — only visible when autopilot is enabled */}
+        {autopilotEnabled && (
+          <div className="pl-6 relative">
+            <Button
+              variant="outline"
+              onClick={toggleAllowAskUser}
+              className={cn(
+                'w-full justify-start gap-2 h-8 text-xs pr-8',
+                allowAskUser && 'border-green-600 text-green-600 hover:text-green-700'
+              )}
+            >
+              <MessageCircleQuestion className="h-3.5 w-3.5" />
+              {tKanban(allowAskUser ? 'askUserOn' : 'askUserOff')}
+            </Button>
+            <TooltipProvider>
+              <Tooltip open={askUserTipOpen} onOpenChange={setAskUserTipOpen}>
+                <TooltipTrigger asChild>
+                  <span
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex items-center justify-center h-5 w-5 rounded-full cursor-help text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={(e) => { e.stopPropagation(); setAskUserTipOpen((v) => !v); }}
+                  >
+                    <Info className="h-3 w-3" />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="max-w-[220px]">
+                  <p className="text-xs">{tKanban('askUserDescription')}</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+        )}
 
         <div className="border-t my-1" />
 

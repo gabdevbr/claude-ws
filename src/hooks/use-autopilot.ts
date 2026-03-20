@@ -20,7 +20,7 @@ async function fetchStatus() {
 
 /** Workspace-wide autopilot hook */
 export function useAutopilot() {
-  const { enabled, phase, currentTaskId, processedCount, retryCount, skippedTaskIds } = useAutopilotStore();
+  const { enabled, allowAskUser, phase, currentTaskId, processedCount, retryCount, skippedTaskIds } = useAutopilotStore();
 
   // Poll status on mount + every 5s
   useEffect(() => {
@@ -41,13 +41,27 @@ export function useAutopilot() {
     }
   }, []);
 
+  const toggleAllowAskUser = useCallback(async () => {
+    try {
+      const res = await fetch('/api/autopilot/toggle-ask-user', { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        useAutopilotStore.getState().updateStatus(data);
+      }
+    } catch {
+      // Next poll will sync
+    }
+  }, []);
+
   return {
     enabled,
+    allowAskUser,
     phase,
     currentTaskId,
     processedCount,
     retryCount,
     skippedTaskIds,
     toggle,
+    toggleAllowAskUser,
   };
 }

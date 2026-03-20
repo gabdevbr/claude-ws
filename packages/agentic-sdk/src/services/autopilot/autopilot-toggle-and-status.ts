@@ -6,6 +6,7 @@ import { eq, and, asc } from 'drizzle-orm';
 
 export interface AutopilotStatus {
   enabled: boolean;
+  allowAskUser: boolean;
   phase: 'idle' | 'planning' | 'processing';
   currentTaskId: string | null;
   processedCount: number;
@@ -15,8 +16,11 @@ export interface AutopilotStatus {
 
 export interface AutopilotManagerLike {
   isEnabled(): boolean;
+  isAllowAskUser(): boolean;
   enable(db: any, schema: any): Promise<void>;
   disable(db: any, schema: any): Promise<void>;
+  enableAskUser(db: any, schema: any): Promise<void>;
+  disableAskUser(db: any, schema: any): Promise<void>;
   getStatus(): AutopilotStatus;
   planAndReorder(projectId: string, deps: any): Promise<void>;
 }
@@ -74,6 +78,19 @@ export function createAutopilotService(
       }
 
       return status;
+    },
+
+    async toggleAllowAskUser(): Promise<AutopilotStatus> {
+      const { db, schema } = deps;
+      const wasAllowed = manager.isAllowAskUser();
+
+      if (wasAllowed) {
+        await manager.disableAskUser(db, schema);
+      } else {
+        await manager.enableAskUser(db, schema);
+      }
+
+      return manager.getStatus();
     },
   };
 }

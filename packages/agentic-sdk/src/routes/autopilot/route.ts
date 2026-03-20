@@ -27,4 +27,16 @@ export default async function autopilotRoute(fastify: FastifyInstance) {
       return reply.code(500).send({ error: 'Internal server error' });
     }
   });
+
+  fastify.post('/api/autopilot/toggle-ask-user', async (_request, reply) => {
+    try {
+      if (!fastify.services.autopilot) {
+        return reply.code(503).send({ error: 'Autopilot service not configured' });
+      }
+      return await fastify.services.autopilot.toggleAllowAskUser();
+    } catch (err) {
+      fastify.log.error(err, 'Failed to toggle autopilot ask-user');
+      return reply.code(500).send({ error: 'Internal server error' });
+    }
+  });
 }
