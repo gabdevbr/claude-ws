@@ -6,6 +6,7 @@ import { setupProjectDefaults } from '@/lib/project-utils';
 import { enqueueProjectPushSync } from '@/lib/minio-push-queue';
 import { unauthorizedResponse, verifyApiKey } from '@/lib/api-auth';
 import { createLogger } from '@/lib/logger';
+import { resolveApiHookUrl } from '@/lib/api-hook-url';
 import { createProjectService, ProjectValidationError } from '@agentic-sdk/services/project/project-crud';
 
 const log = createLogger('MinioPushSyncAPI');
@@ -17,7 +18,7 @@ function quoteEnvValue(value: string): string {
   return `"${escaped}"`;
 }
 
-async function syncProjectHookEnv(projectPath: string, apiHookUrl: string): Promise<void> {
+async function syncProjectHookEnv(projectPath: string, apiHookUrl: string, apiHookApiKey?: string): Promise<void> {
   const hooksDir = join(projectPath, '.claude', 'hooks');
   const envPath = join(hooksDir, '.env');
   await mkdir(hooksDir, { recursive: true });
@@ -30,24 +31,33 @@ async function syncProjectHookEnv(projectPath: string, apiHookUrl: string): Prom
   }
 
   const lines = content.length > 0 ? content.split(/\r?\n/) : [];
-  const newLine = `API_HOOK_URL=${quoteEnvValue(apiHookUrl)}`;
-  let replaced = false;
+  const nextLineByKey: Record<string, string> = {
+    API_HOOK_URL: `API_HOOK_URL=${quoteEnvValue(apiHookUrl)}`,
+  };
+  if (apiHookApiKey && apiHookApiKey.trim()) {
+    nextLineByKey.API_HOOK_API_KEY = `API_HOOK_API_KEY=${quoteEnvValue(apiHookApiKey)}`;
+  }
+  const replaced = new Set<string>();
 
   const nextLines = lines.map((line) => {
-    if (/^\s*API_HOOK_URL\s*=/.test(line)) {
-      replaced = true;
-      return newLine;
+    for (const [key, nextLine] of Object.entries(nextLineByKey)) {
+      if (new RegExp(`^\\s*${key}\\s*=`).test(line)) {
+        replaced.add(key);
+        return nextLine;
+      }
     }
     return line;
   });
 
-  if (!replaced) {
-    if (nextLines.length > 0 && nextLines[nextLines.length - 1] !== '') {
-      nextLines.push(newLine);
-    } else if (nextLines.length === 0) {
-      nextLines.push(newLine);
-    } else {
-      nextLines[nextLines.length - 1] = newLine;
+  for (const [key, nextLine] of Object.entries(nextLineByKey)) {
+    if (!replaced.has(key)) {
+      if (nextLines.length > 0 && nextLines[nextLines.length - 1] !== '') {
+        nextLines.push(nextLine);
+      } else if (nextLines.length === 0) {
+        nextLines.push(nextLine);
+      } else {
+        nextLines[nextLines.length - 1] = nextLine;
+      }
     }
   }
 
@@ -88,13 +98,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'projectId is required' }, { status: 400 });
     }
 
-    const apiHookUrl = process.env.API_HOOK_URL?.trim();
+    const apiHookUrl = resolveApiHookUrl(undefined, request.nextUrl.hostname);
     if (!apiHookUrl) {
       return NextResponse.json({ error: 'API_HOOK_URL is not configured on server' }, { status: 500 });
     }
 
     const project = await ensureProject(projectId);
-    await syncProjectHookEnv(project.path, apiHookUrl);
+    await syncProjectHookEnv(project.path, apiHookUrl, process.env.API_HOOK_API_KEY?.trim());
 
     const enqueueResult = await enqueueProjectPushSync(project.path, project.id);
 

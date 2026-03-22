@@ -6,6 +6,7 @@ import path from 'path';
 import { db, schema } from './db';
 import { asc } from 'drizzle-orm';
 import { createLogger } from './logger';
+import { buildApiHookEndpoint, resolveApiHookUrl } from './api-hook-url';
 
 const log = createLogger('MinioPullQueue');
 
@@ -22,6 +23,7 @@ export interface ManifestEntry {
 
 interface HookEnv {
   apiHookUrl: string;
+  apiHookApiKey: string;
   projectId: string;
 }
 
@@ -255,18 +257,31 @@ async function readHookEnv(projectPath: string, fallbackProjectId: string): Prom
     map.set(key, value);
   }
 
-  const apiHookUrl = map.get('API_HOOK_URL')?.trim() || process.env.API_HOOK_URL?.trim() || '';
+  const apiHookUrl = resolveApiHookUrl(map);
   if (!apiHookUrl) {
     throw new Error('Missing API_HOOK_URL in project hook .env and process env');
   }
+  const apiHookApiKey = map.get('API_HOOK_API_KEY')?.trim()
+    || process.env.API_HOOK_API_KEY?.trim()
+    || '';
 
   const projectId = map.get('PROJECT_ID')?.trim() || fallbackProjectId;
-  return { apiHookUrl, projectId };
+  return { apiHookUrl, apiHookApiKey, projectId };
 }
 
-async function fetchManifest(apiHookUrl: string, folder: string, label: string): Promise<ManifestEntry[]> {
-  const url = `${apiHookUrl}/api/sync/manifest?folder=${encodeURIComponent(folder)}`;
-  const response = await fetch(url);
+function buildApiHeaders(apiHookApiKey: string): Record<string, string> {
+  if (!apiHookApiKey) return {};
+  return { 'x-api-key': apiHookApiKey };
+}
+
+async function fetchManifest(
+  apiHookUrl: string,
+  apiHookApiKey: string,
+  folder: string,
+  label: string
+): Promise<ManifestEntry[]> {
+  const url = buildApiHookEndpoint(apiHookUrl, `manifest?folder=${encodeURIComponent(folder)}`);
+  const response = await fetch(url, { headers: buildApiHeaders(apiHookApiKey) });
   if (!response.ok) {
     throw new Error(`Manifest API failed for ${label}: HTTP ${response.status} ${response.statusText}`);
   }
@@ -342,6 +357,7 @@ async function scanLocalFolderCandidates(
 
 async function fetchQueueCandidates(
   apiHookUrl: string,
+  apiHookApiKey: string,
   projectPath: string,
   projectId: string,
   sqlite: Database.Database
@@ -350,8 +366,8 @@ async function fetchQueueCandidates(
   const markdownPrefix = `markdown/${projectId}`;
 
   const [mainManifest, markdownManifest] = await Promise.all([
-    fetchManifest(apiHookUrl, targetPrefix, 'main folder'),
-    fetchManifest(apiHookUrl, markdownPrefix, 'markdown folder'),
+    fetchManifest(apiHookUrl, apiHookApiKey, targetPrefix, 'main folder'),
+    fetchManifest(apiHookUrl, apiHookApiKey, markdownPrefix, 'markdown folder'),
   ]);
 
   const normalize = (entries: ManifestEntry[], folder: 'main' | 'markdown'): QueueFileCandidate[] => (
@@ -505,7 +521,13 @@ export async function enqueueProjectPullSync(projectPath: string, fallbackProjec
   const sqlite = await ensurePullQueueDb(projectPath);
 
   try {
-    const candidates = await fetchQueueCandidates(hookEnv.apiHookUrl, projectPath, hookEnv.projectId, sqlite);
+    const candidates = await fetchQueueCandidates(
+      hookEnv.apiHookUrl,
+      hookEnv.apiHookApiKey,
+      projectPath,
+      hookEnv.projectId,
+      sqlite
+    );
     const { jobId, counts } = enqueueInDb(sqlite, hookEnv.projectId, candidates);
     return {
       jobId,
@@ -780,7 +802,13 @@ async function processJob(projectPath: string, projectId: string, job: PendingJo
     }
 
     const hookEnv = await readHookEnv(projectPath, projectId);
-    const candidates = await fetchQueueCandidates(hookEnv.apiHookUrl, projectPath, hookEnv.projectId, sqlite);
+    const candidates = await fetchQueueCandidates(
+      hookEnv.apiHookUrl,
+      hookEnv.apiHookApiKey,
+      projectPath,
+      hookEnv.projectId,
+      sqlite
+    );
     const manifestMap = new Map(candidates.map((entry) => [entry.key, entry]));
 
     const jobFiles = sqlite.prepare(`
@@ -879,6 +907,7 @@ async function processJob(projectPath: string, projectId: string, job: PendingJo
 
           const manifestEntry = await fetchManifest(
             hookEnv.apiHookUrl,
+            hookEnv.apiHookApiKey,
             row.folder === 'main' ? hookEnv.projectId : `markdown/${hookEnv.projectId}`,
             row.folder
           );

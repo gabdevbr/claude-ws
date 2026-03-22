@@ -34,6 +34,7 @@ function createConcurrencyLimit(concurrency: number) {
 // ==========================================
 const config = {
     apiBaseUrl: process.env.API_HOOK_URL as string,
+    apiHookApiKey: (process.env.API_HOOK_API_KEY || "").trim(),
     targetPrefix: (process.env.PROJECT_ID || "__PROJECT_ID__") as string,
 };
 
@@ -47,6 +48,20 @@ const TMP_DIR = path.join(process.cwd(), ".claude", "tmp");
 const LOCAL_DATA_DIR = ".";
 const STATE_FILE = path.join(TMP_DIR, "local-sync-state.json");
 const IGNORED_DIRS = [".claude", "temp", "node_modules", ".git", "markdown"];
+
+function buildApiUrl(endpoint: string): string {
+    const base = String(config.apiBaseUrl || "").replace(/\/+$/g, "");
+    const pathPart = endpoint.replace(/^\/+/g, "");
+    return `${base}/${pathPart}`;
+}
+
+function buildApiHeaders(baseHeaders: Record<string, string> = {}): HeadersInit {
+    const headers: Record<string, string> = { ...baseHeaders };
+    if (config.apiHookApiKey) {
+        headers["x-api-key"] = config.apiHookApiKey;
+    }
+    return headers;
+}
 
 // Function to create tmp directory
 async function ensureTmpDir() {
@@ -66,9 +81,9 @@ export interface ManifestEntry {
 // ==========================================
 async function uploadFile(s3Key: string, filePath: string) {
     // Step 1: Get presigned PUT URL from API
-    const urlRes = await fetch(`${config.apiBaseUrl}/api/sync/upload-url`, {
+    const urlRes = await fetch(buildApiUrl("upload-url"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: buildApiHeaders({ "Content-Type": "application/json" }),
         body: JSON.stringify({ key: s3Key }),
     });
 

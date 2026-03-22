@@ -6,6 +6,7 @@ import path from 'path';
 import { asc } from 'drizzle-orm';
 import { db, schema } from './db';
 import { createLogger } from './logger';
+import { buildApiHookEndpoint, resolveApiHookUrl } from './api-hook-url';
 
 const log = createLogger('MinioPushQueue');
 
@@ -23,6 +24,7 @@ export interface ManifestEntry {
 
 interface HookEnv {
   apiHookUrl: string;
+  apiHookApiKey: string;
   projectId: string;
 }
 
@@ -224,13 +226,24 @@ async function readHookEnv(projectPath: string, fallbackProjectId: string): Prom
     values.set(key, value);
   }
 
-  const apiHookUrl = values.get('API_HOOK_URL')?.trim() || process.env.API_HOOK_URL?.trim() || '';
+  const apiHookUrl = resolveApiHookUrl(values);
   if (!apiHookUrl) {
     throw new Error('Missing API_HOOK_URL in project hook .env and process env');
   }
+  const apiHookApiKey = values.get('API_HOOK_API_KEY')?.trim()
+    || process.env.API_HOOK_API_KEY?.trim()
+    || '';
 
   const projectId = values.get('PROJECT_ID')?.trim() || fallbackProjectId;
-  return { apiHookUrl, projectId };
+  return { apiHookUrl, apiHookApiKey, projectId };
+}
+
+function buildApiHeaders(apiHookApiKey: string, baseHeaders: Record<string, string> = {}): Record<string, string> {
+  const headers: Record<string, string> = { ...baseHeaders };
+  if (apiHookApiKey) {
+    headers['x-api-key'] = apiHookApiKey;
+  }
+  return headers;
 }
 
 async function requestJsonWithRetry(
@@ -326,9 +339,13 @@ async function requestWithoutJsonWithRetry(
   throw new Error(`${label} failed after ${REQUEST_MAX_RETRIES} attempts: ${lastError?.message || 'Unknown error'}`);
 }
 
-async function fetchManifest(apiHookUrl: string, folder: string): Promise<ManifestEntry[]> {
-  const url = `${apiHookUrl}/api/sync/manifest?folder=${encodeURIComponent(folder)}`;
-  const payload = await requestJsonWithRetry(url, { method: 'GET' }, `Manifest fetch (${folder})`) as {
+async function fetchManifest(apiHookUrl: string, apiHookApiKey: string, folder: string): Promise<ManifestEntry[]> {
+  const url = buildApiHookEndpoint(apiHookUrl, `manifest?folder=${encodeURIComponent(folder)}`);
+  const payload = await requestJsonWithRetry(
+    url,
+    { method: 'GET', headers: buildApiHeaders(apiHookApiKey) },
+    `Manifest fetch (${folder})`
+  ) as {
     status?: string;
     data?: unknown;
     message?: string;
@@ -565,7 +582,7 @@ function enqueueInDb(
 export async function enqueueProjectPushSync(projectPath: string, fallbackProjectId: string) {
   const hookEnv = await readHookEnv(projectPath, fallbackProjectId);
   const [remoteManifest, localFiles] = await Promise.all([
-    fetchManifest(hookEnv.apiHookUrl, hookEnv.projectId),
+    fetchManifest(hookEnv.apiHookUrl, hookEnv.apiHookApiKey, hookEnv.projectId),
     scanLocalFiles(projectPath, hookEnv.projectId),
   ]);
 
@@ -656,12 +673,12 @@ function upsertPushState(
   `).run(fileKey, operation, status, fingerprint, size, lastModified, jobId, Date.now());
 }
 
-async function getUploadUrl(apiHookUrl: string, key: string): Promise<string> {
+async function getUploadUrl(apiHookUrl: string, apiHookApiKey: string, key: string): Promise<string> {
   const payload = await requestJsonWithRetry(
-    `${apiHookUrl}/api/sync/upload-url`,
+    buildApiHookEndpoint(apiHookUrl, 'upload-url'),
     {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildApiHeaders(apiHookApiKey, { 'Content-Type': 'application/json' }),
       body: JSON.stringify({ key }),
     },
     `Upload URL (${key})`,
@@ -686,10 +703,14 @@ async function uploadByPresignedUrl(url: string, localPath: string): Promise<voi
   );
 }
 
-async function deleteByApiEndpoint(apiHookUrl: string, key: string): Promise<void> {
+async function deleteByApiEndpoint(apiHookUrl: string, apiHookApiKey: string, key: string): Promise<void> {
   const encodedKey = encodeURIComponent(key);
-  const deleteUrl = `${apiHookUrl}/api/sync/delete?key=${encodedKey}`;
-  await requestWithoutJsonWithRetry(deleteUrl, { method: 'DELETE' }, `Delete file (${key})`);
+  const deleteUrl = buildApiHookEndpoint(apiHookUrl, `delete?key=${encodedKey}`);
+  await requestWithoutJsonWithRetry(
+    deleteUrl,
+    { method: 'DELETE', headers: buildApiHeaders(apiHookApiKey) },
+    `Delete file (${key})`
+  );
 }
 
 async function processJob(projectPath: string, projectId: string, job: PendingJob): Promise<void> {
@@ -750,10 +771,10 @@ async function processJob(projectPath: string, projectId: string, job: PendingJo
               throw new Error(`Local file not found: ${row.localPath}`);
             }
 
-            const uploadUrl = await getUploadUrl(hookEnv.apiHookUrl, row.fileKey);
+            const uploadUrl = await getUploadUrl(hookEnv.apiHookUrl, hookEnv.apiHookApiKey, row.fileKey);
             await uploadByPresignedUrl(uploadUrl, row.localPath);
           } else {
-            await deleteByApiEndpoint(hookEnv.apiHookUrl, row.fileKey);
+            await deleteByApiEndpoint(hookEnv.apiHookUrl, hookEnv.apiHookApiKey, row.fileKey);
           }
 
           markJobFileStatus(sqlite, job.id, row.fileKey, 'done', null);

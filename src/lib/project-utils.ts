@@ -3,6 +3,7 @@ import { mkdir, writeFile, access, copyFile, readFile, chmod } from 'fs/promises
 import { spawn } from 'child_process';
 
 import { sanitizeDirName } from './file-utils';
+import { resolveApiHookUrl } from './api-hook-url';
 
 /**
  * Generates a unique, non-colliding absolute directory path for a project name.
@@ -105,9 +106,11 @@ export async function setupProjectDefaults(projectPath: string, projectId?: stri
         try {
             await access(envPath);
         } catch {
-            const apiBase = process.env.API_HOOK_URL || process.env.API_BASE_URL || `http://localhost:${process.env.PORT || '8052'}`;
+            const apiBase = resolveApiHookUrl();
+            const apiHookApiKey = process.env.API_HOOK_API_KEY?.trim() || '';
             const projectIdEnvLine = projectId ? `PROJECT_ID="${projectId}"\n` : '';
-            const envContent = `API_HOOK_URL="${apiBase}"\n${projectIdEnvLine}`;
+            const apiKeyEnvLine = apiHookApiKey ? `API_HOOK_API_KEY="${apiHookApiKey}"\n` : '';
+            const envContent = `API_HOOK_URL="${apiBase}"\n${apiKeyEnvLine}${projectIdEnvLine}`;
             await writeFile(envPath, envContent, 'utf-8');
         }
     } catch (e) {

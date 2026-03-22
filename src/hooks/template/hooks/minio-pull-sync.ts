@@ -10,6 +10,7 @@ dotenvConfig({ path: path.join(hooksDir, ".env") });
 
 const config = {
   apiBaseUrl: process.env.API_HOOK_URL as string,
+  apiHookApiKey: (process.env.API_HOOK_API_KEY || "").trim(),
   projectId: (process.env.PROJECT_ID || "__PROJECT_ID__") as string,
 };
 
@@ -19,6 +20,17 @@ if (!config.apiBaseUrl) {
 }
 
 const PULL_DB_PATH = path.join(hooksDir, "pull-sync-state.db");
+
+function buildApiUrl(endpoint: string): string {
+  const base = String(config.apiBaseUrl || "").replace(/\/+$/g, "");
+  const path = endpoint.replace(/^\/+/g, "");
+  return `${base}/${path}`;
+}
+
+function buildApiHeaders(): HeadersInit {
+  if (!config.apiHookApiKey) return {};
+  return { "x-api-key": config.apiHookApiKey };
+}
 
 type QueueJobStatus = "queued" | "running" | "completed" | "failed" | "partial";
 type FolderType = "main" | "markdown";
@@ -102,8 +114,8 @@ async function ensurePullDb(): Promise<Database.Database> {
 async function fetchManifest(folder: string, label: string): Promise<ManifestEntry[]> {
   console.error(`🔍 Calling API to get manifest for '${label}' (${folder})...`);
 
-  const url = `${config.apiBaseUrl}/api/sync/manifest?folder=${encodeURIComponent(folder)}`;
-  const response = await fetch(url);
+  const url = buildApiUrl(`manifest?folder=${encodeURIComponent(folder)}`);
+  const response = await fetch(url, { headers: buildApiHeaders() });
 
   if (!response.ok) {
     throw new Error(`API manifest failed for ${label}: HTTP ${response.status} ${response.statusText}`);
