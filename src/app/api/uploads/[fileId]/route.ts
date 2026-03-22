@@ -7,7 +7,7 @@ import { createUploadService } from '@agentic-sdk/services/attempt/attempt-file-
 import { findUploadedFile } from '@agentic-sdk/services/upload/tmp-file-processor-and-cleanup';
 
 const uploadsDir = path.join(
-  process.env.DATA_DIR || path.join(process.env.CLAUDE_WS_USER_CWD || process.cwd(), 'data'),
+  process.env.DATA_DIR || path.join(process.env.CLAUDE_WS_USER_CWD || /* turbopackIgnore: true */ process.cwd(), 'data'),
   'uploads'
 );
 const uploadService = createUploadService(db, uploadsDir);
