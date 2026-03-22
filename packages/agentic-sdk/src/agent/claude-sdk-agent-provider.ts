@@ -6,7 +6,7 @@
 
 import { EventEmitter } from 'events';
 import { existsSync, readFileSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import { join } from 'path';
 import { homedir } from 'os';
 import { query, type Query } from '@anthropic-ai/claude-agent-sdk';
 import { adaptSDKMessage, isValidSDKMessage } from './claude-sdk-message-to-output-adapter';
@@ -166,13 +166,6 @@ export class AgentProvider extends EventEmitter {
       const defaultModel = this.config.anthropicModel || 'opus';
       const effectiveModel = model ? this.resolveModel(model) : defaultModel;
 
-      // Ensure the current node binary's directory is in PATH — when running under PM2/systemd
-      // with nvm, the SDK's `spawn("node", ...)` can fail with ENOENT if PATH doesn't include it
-      const nodeBinDir = dirname(process.execPath);
-      if (process.env.PATH && !process.env.PATH.split(':').includes(nodeBinDir)) {
-        process.env.PATH = `${nodeBinDir}:${process.env.PATH}`;
-      }
-
       // Set env vars on process.env so the SDK subprocess inherits them
       if (this.config.anthropicBaseUrl) process.env.ANTHROPIC_BASE_URL = this.config.anthropicBaseUrl;
       if (this.config.anthropicAuthToken) {
@@ -182,12 +175,7 @@ export class AgentProvider extends EventEmitter {
       delete process.env.CLAUDECODE;
       delete process.env.CLAUDE_CODE_ENTRYPOINT;
 
-      // Use full path to node binary — spawn("node", ...) fails under PM2/systemd with nvm
-      // because PATH may not include the nvm bin directory. process.execPath is always absolute.
-      const nodeExecutable = process.execPath as 'node';
-
       const queryOptions = {
-        executable: nodeExecutable,
         cwd: projectPath,
         model: effectiveModel,
         permissionMode: 'bypassPermissions' as const,
@@ -221,10 +209,7 @@ export class AgentProvider extends EventEmitter {
         },
       };
 
-      log.info({
-        model: effectiveModel, cwd: projectPath, resume: sessionOptions?.resume,
-        nodeExec: nodeExecutable, pathExists: existsSync(projectPath),
-      }, 'SDK query starting');
+      log.info({ model: effectiveModel, cwd: projectPath, resume: sessionOptions?.resume }, 'SDK query starting');
 
       const response = query({
         prompt,
