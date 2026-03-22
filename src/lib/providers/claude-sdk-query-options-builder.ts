@@ -11,9 +11,10 @@
  * - Windows claude.exe path resolution
  */
 
-import { existsSync, mkdirSync } from 'fs';
-import { join, normalize, resolve } from 'path';
+import { mkdirSync } from 'fs';
+import { resolve } from 'path';
 import { checkpointManager } from '../checkpoint-manager';
+import { findClaudePath } from '../cli-query';
 import { createLogger } from '../logger';
 import { isServerCommand } from './claude-sdk-model-alias-and-server-command-utils';
 import type { MCPServerConfig } from './claude-sdk-mcp-config-loader';
@@ -53,21 +54,11 @@ export function buildQueryOptions(params: QueryOptionsBuilderParams) {
 
   const checkpointOptions = checkpointManager.getCheckpointingOptions();
 
-  // Resolve Windows claude.exe path
-  const resolvedClaudePath = (() => {
-    if (process.platform !== 'win32') return undefined;
-    const envPath = process.env.CLAUDE_PATH;
-    if (envPath && existsSync(normalize(envPath))) return normalize(envPath);
-    const home = process.env.USERPROFILE || process.env.HOME || '';
-    const candidates = [
-      join(home, '.local', 'bin', 'claude.exe'),
-      join(home, 'AppData', 'Local', 'Programs', 'claude', 'claude.exe'),
-    ];
-    for (const c of candidates) {
-      if (existsSync(c)) return c;
-    }
-    return undefined;
-  })();
+  // Resolve Claude CLI executable path (all platforms)
+  const resolvedClaudePath = findClaudePath();
+  if (!resolvedClaudePath) {
+    log.warn('Claude Code CLI not found. Install it (npm install -g @anthropic-ai/claude-code) or set CLAUDE_PATH for best reliability.');
+  }
 
   // Match query options shape from 964deb6 for performance — minimal env override only
   const queryOptions = {
