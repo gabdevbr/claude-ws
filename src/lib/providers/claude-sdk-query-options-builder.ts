@@ -8,13 +8,11 @@
  * - canUseTool callback factory (AskUserQuestion gate + Bash BGPID fix)
  * - subprocess environment (strips proxy/session detection vars)
  * - system prompt preset
- * - Windows claude.exe path resolution
  */
 
 import { mkdirSync } from 'fs';
 import { resolve } from 'path';
 import { checkpointManager } from '../checkpoint-manager';
-import { findClaudePath } from '../cli-query';
 import { createLogger } from '../logger';
 import { isServerCommand } from './claude-sdk-model-alias-and-server-command-utils';
 import type { MCPServerConfig } from './claude-sdk-mcp-config-loader';
@@ -54,14 +52,10 @@ export function buildQueryOptions(params: QueryOptionsBuilderParams) {
 
   const checkpointOptions = checkpointManager.getCheckpointingOptions();
 
-  // Resolve Claude CLI executable path (all platforms)
-  const resolvedClaudePath = findClaudePath();
-  if (!resolvedClaudePath) {
-    log.warn('Claude Code CLI not found. Install it (npm install -g @anthropic-ai/claude-code) or set CLAUDE_PATH for best reliability.');
-  }
-
-  // Match query options shape from 964deb6 for performance — minimal env override only
+  // SDK has its own bundled cli.js — no need to find an external Claude CLI executable.
+  // Use process.execPath (absolute node path) so SDK spawn works under PM2/systemd with nvm.
   const queryOptions = {
+    executable: process.execPath as 'node',
     cwd: projectPath,
     model,
     permissionMode: 'bypassPermissions' as const,
@@ -80,10 +74,6 @@ export function buildQueryOptions(params: QueryOptionsBuilderParams) {
     ...(maxTurns ? { maxTurns } : {}),
     abortController: controller,
     canUseTool: canUseToolCallback,
-    ...(resolvedClaudePath ? { pathToClaudeCodeExecutable: resolvedClaudePath } : {}),
-    // Build isolated env: strip Claude Code session/auth vars so the SDK subprocess
-    // doesn't inherit remote MCP servers, login state, or nested session detection.
-    // Only pass through vars needed for LLM API calls and basic operation.
     env: buildIsolatedSubprocessEnv(model),
   };
 
