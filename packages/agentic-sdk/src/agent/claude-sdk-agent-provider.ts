@@ -6,7 +6,7 @@
 
 import { EventEmitter } from 'events';
 import { existsSync, readFileSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { query, type Query } from '@anthropic-ai/claude-agent-sdk';
 import { adaptSDKMessage, isValidSDKMessage } from './claude-sdk-message-to-output-adapter';
@@ -165,6 +165,13 @@ export class AgentProvider extends EventEmitter {
       // Use custom model from env if configured, otherwise resolve alias
       const defaultModel = this.config.anthropicModel || 'opus';
       const effectiveModel = model ? this.resolveModel(model) : defaultModel;
+
+      // Ensure the current node binary's directory is in PATH — when running under PM2/systemd
+      // with nvm, the SDK's `spawn("node", ...)` can fail with ENOENT if PATH doesn't include it
+      const nodeBinDir = dirname(process.execPath);
+      if (process.env.PATH && !process.env.PATH.split(':').includes(nodeBinDir)) {
+        process.env.PATH = `${nodeBinDir}:${process.env.PATH}`;
+      }
 
       // Set env vars on process.env so the SDK subprocess inherits them
       if (this.config.anthropicBaseUrl) process.env.ANTHROPIC_BASE_URL = this.config.anthropicBaseUrl;
