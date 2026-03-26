@@ -44,6 +44,7 @@
   ],
   "exclude": [
     "node_modules",
+    "drizzle.config.ts",
     "docs/**/*.ts",
     "data/projects/**/*.ts",
     "data/projects/**/*.tsx",
