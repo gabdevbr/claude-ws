@@ -3,13 +3,7 @@ import { existsSync } from "fs";
 import path from "path";
 import { config as dotenvConfig } from "dotenv";
 
-type HookEnvState = {
-  apiHookUrl: string;
-  apiHookApiKey: string;
-  apiAccessKey: string;
-  port: string;
-  projectId: string;
-};
+const PROJECT_ID = "__PROJECT_ID__";
 
 function resolveRoomTemplate(value: string, projectId: string): string {
   const trimmed = value.trim().replace(/^"|"$/g, "");
@@ -64,86 +58,6 @@ function loadRootEnv(startPath: string = process.cwd()): void {
   }
 }
 
-function getHookEnvPath(projectPath: string): string {
-  return path.join(projectPath, ".claude", "hooks", "hook.env");
-}
-
-function generateHookEnvContent(projectId: string): string {
-  return `# ================================================
-# Claude Workspace - Hook Environment Configuration
-# ================================================
-# This file is intentionally minimal.
-# Sync configuration is loaded from workspace root .env.
-
-# Project ID (REQUIRED)
-# Unique identifier for this project
-PROJECT_ID=${projectId}
-`;
-}
-
-async function ensureMinimalHookEnv(projectPath: string, fallbackProjectId?: string): Promise<void> {
-  const hookEnvPath = getHookEnvPath(projectPath);
-  await fs.mkdir(path.dirname(hookEnvPath), { recursive: true });
-
-  let currentProjectId = (fallbackProjectId || "").trim();
-  if (existsSync(hookEnvPath)) {
-    const content = await fs.readFile(hookEnvPath, "utf-8");
-    const match = content.match(/^\s*PROJECT_ID\s*=\s*(.+)\s*$/m);
-    if (match?.[1]) {
-      currentProjectId = match[1].trim().replace(/^"|"$/g, "");
-    }
-  }
-
-  const finalProjectId = currentProjectId || "__PROJECT_ID__";
-  await fs.writeFile(hookEnvPath, generateHookEnvContent(finalProjectId), "utf-8");
-}
-
-async function readProjectId(projectPath: string, fallbackProjectId?: string): Promise<string> {
-  const hookEnvPath = getHookEnvPath(projectPath);
-  if (!existsSync(hookEnvPath)) {
-    throw new Error(`hook.env not found at ${hookEnvPath}`);
-  }
-
-  const content = await fs.readFile(hookEnvPath, "utf-8");
-  const match = content.match(/^\s*PROJECT_ID\s*=\s*(.+)\s*$/m);
-  const fromFile = match?.[1]?.trim().replace(/^"|"$/g, "") || "";
-  return fromFile || fallbackProjectId || "__PROJECT_ID__";
-}
-
-// ==========================================
-// Initialize Hook Environment
-// ==========================================
-
-async function initializeHookEnv(): Promise<HookEnvState> {
-  const projectPath = process.cwd();
-  loadRootEnv(projectPath);
-  const fallbackProjectId = (process.env.PROJECT_ID || "").trim();
-  const hookEnvPath = getHookEnvPath(projectPath);
-
-  if (!existsSync(hookEnvPath)) {
-    await ensureMinimalHookEnv(projectPath, fallbackProjectId);
-  } else {
-    const content = await fs.readFile(hookEnvPath, "utf-8");
-    if (!/^\s*PROJECT_ID\s*=.+$/m.test(content)) {
-      await ensureMinimalHookEnv(projectPath, fallbackProjectId);
-    }
-  }
-
-  const projectId = await readProjectId(projectPath, fallbackProjectId);
-  if (!projectId) {
-    console.error('❌ PROJECT_ID is required but missing in hook.env!');
-    process.exit(1);
-  }
-
-  return {
-    apiHookUrl: resolveApiHookUrl(projectId),
-    apiHookApiKey: (process.env.API_HOOK_API_KEY || "").trim(),
-    apiAccessKey: (process.env.API_ACCESS_KEY || "").trim(),
-    port: (process.env.PORT || "").trim(),
-    projectId,
-  };
-}
-
 /** Simple concurrency limiter — avoids p-limit dependency */
 function createConcurrencyLimit(concurrency: number) {
     let active = 0;
@@ -180,18 +94,19 @@ let config: {
     targetPrefix: string;
 };
 
-function initializeRuntimeConfig(hookEnv: Awaited<ReturnType<typeof initializeHookEnv>>) {
-    const queuePort = (hookEnv.port || "").trim();
+function initializeRuntimeConfig() {
+    loadRootEnv(process.cwd());
+    const queuePort = (process.env.PORT || "").trim();
     const apiQueueUrl = (queuePort ? `http://localhost:${queuePort}` : "").trim();
 
     config = {
-        apiBaseUrl: hookEnv.apiHookUrl as string,
-        apiHookApiKey: (hookEnv.apiHookApiKey || "").trim(),
+        apiBaseUrl: resolveApiHookUrl(PROJECT_ID),
+        apiHookApiKey: (process.env.API_HOOK_API_KEY || "").trim(),
         apiQueueUrl,
-        apiQueueKey: (hookEnv.apiAccessKey || "").trim(),
+        apiQueueKey: (process.env.API_ACCESS_KEY || "").trim(),
         appPort: queuePort,
-        projectId: (hookEnv.projectId || "__PROJECT_ID__") as string,
-        targetPrefix: (hookEnv.projectId || "__PROJECT_ID__") as string,
+        projectId: PROJECT_ID,
+        targetPrefix: PROJECT_ID,
     };
 
     if (!config.apiBaseUrl) {
@@ -364,8 +279,7 @@ async function scanDirectory(dir: string, fileList: string[] = []) {
 // MAIN SYNC FUNCTION
 // ==========================================
 async function runCheck() {
-    const hookEnv = await initializeHookEnv();
-    initializeRuntimeConfig(hookEnv);
+    initializeRuntimeConfig();
 
     // Preferred path: enqueue into server-side push queue (records jobs in push-sync-state.db)
     const enqueued = await enqueuePushJob();

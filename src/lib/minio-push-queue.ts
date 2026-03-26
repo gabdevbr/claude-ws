@@ -22,7 +22,7 @@ export interface ManifestEntry {
   url: string;
 }
 
-interface HookEnv {
+interface QueueConfig {
   apiHookUrl: string;
   apiHookApiKey: string;
   projectId: string;
@@ -209,45 +209,16 @@ async function openExistingPushQueueDb(projectPath: string): Promise<Database.Da
   return sqlite;
 }
 
-async function readHookEnv(projectPath: string, fallbackProjectId: string): Promise<HookEnv> {
-  // Auto-migrate if .env exists but hook.env doesn't
-  const { validateHookEnv, readHookEnv: readHookEnvFromFile, ensureHookEnv, upgradeHookEnv, getHookEnvConfigFromServerEnv } = await import('@/lib/hook-env-manager');
-
-  const validation = await validateHookEnv(projectPath, ['PROJECT_ID']);
-
-  if (!validation.exists) {
-    console.error(`⚠️  Project ${projectPath} missing hook.env, auto-recreating...`);
-
-    // Auto-recreate from server config
-    const serverConfig = await getHookEnvConfigFromServerEnv(fallbackProjectId, projectPath);
-    await ensureHookEnv(projectPath, fallbackProjectId, serverConfig);
-
-    console.error(`✅ Recreated hook.env for ${projectPath}`);
-  } else if (!validation.valid) {
-    console.error(`⚠️  Project ${projectPath} has invalid hook.env, auto-upgrading...`);
-
-    await upgradeHookEnv(projectPath, fallbackProjectId);
-
-    console.error(`✅ Upgraded hook.env for ${projectPath}`);
-  }
-
-  // Read using centralized manager
-  const env = await readHookEnvFromFile(projectPath, fallbackProjectId);
-
-  // Resolve API hook URL
-  const apiHookUrl = env.apiHookUrl || '';
+function resolveQueueConfig(projectId: string): QueueConfig {
+  const apiHookUrl = resolveApiHookUrl(undefined, undefined, projectId);
   if (!apiHookUrl) {
-    throw new Error(
-      'API_HOOK_URL not configured in hook.env or server .env. ' +
-      'hook.env now only contains PROJECT_ID. ' +
-      'Please check server configuration.'
-    );
+    throw new Error(`API_HOOK_URL is not configured from server .env for project ${projectId}.`);
   }
 
   return {
     apiHookUrl,
-    apiHookApiKey: env.apiHookApiKey || process.env.API_HOOK_API_KEY || '',
-    projectId: env.projectId || fallbackProjectId
+    apiHookApiKey: process.env.API_HOOK_API_KEY || '',
+    projectId,
   };
 }
 
@@ -598,25 +569,25 @@ function enqueueInDb(
   return { jobId, counts };
 }
 
-export async function enqueueProjectPushSync(projectPath: string, fallbackProjectId: string) {
-  const hookEnv = await readHookEnv(projectPath, fallbackProjectId);
+export async function enqueueProjectPushSync(projectPath: string, projectId: string) {
+  const queueConfig = resolveQueueConfig(projectId);
   const [mainManifest, markdownManifest, localFiles] = await Promise.all([
-    fetchManifest(hookEnv.apiHookUrl, hookEnv.apiHookApiKey, 'main'),
-    fetchManifest(hookEnv.apiHookUrl, hookEnv.apiHookApiKey, 'markdown', { root: 'markdown' }),
-    scanLocalFiles(projectPath, hookEnv.projectId),
+    fetchManifest(queueConfig.apiHookUrl, queueConfig.apiHookApiKey, 'main'),
+    fetchManifest(queueConfig.apiHookUrl, queueConfig.apiHookApiKey, 'markdown', { root: 'markdown' }),
+    scanLocalFiles(projectPath, queueConfig.projectId),
   ]);
   const remoteManifest = [...mainManifest, ...markdownManifest];
 
-  const candidates = buildQueueCandidates(hookEnv.projectId, localFiles, remoteManifest);
+  const candidates = buildQueueCandidates(queueConfig.projectId, localFiles, remoteManifest);
   const sqlite = await ensurePushQueueDb(projectPath);
 
   try {
-    const { jobId, counts } = enqueueInDb(sqlite, hookEnv.projectId, candidates);
+    const { jobId, counts } = enqueueInDb(sqlite, queueConfig.projectId, candidates);
     return {
       jobId,
       counts,
       dbPath: getPushQueueDbPath(projectPath),
-      projectId: hookEnv.projectId,
+      projectId: queueConfig.projectId,
     };
   } finally {
     sqlite.close();
@@ -743,7 +714,7 @@ async function processJob(projectPath: string, projectId: string, job: PendingJo
       return;
     }
 
-    const hookEnv = await readHookEnv(projectPath, projectId);
+    const queueConfig = resolveQueueConfig(projectId);
 
     const jobFiles = sqlite.prepare(`
       SELECT file_key as fileKey, operation, local_path as localPath, size, last_modified as lastModified, fingerprint
@@ -792,10 +763,10 @@ async function processJob(projectPath: string, projectId: string, job: PendingJo
               throw new Error(`Local file not found: ${row.localPath}`);
             }
 
-            const uploadUrl = await getUploadUrl(hookEnv.apiHookUrl, hookEnv.apiHookApiKey, row.fileKey);
+            const uploadUrl = await getUploadUrl(queueConfig.apiHookUrl, queueConfig.apiHookApiKey, row.fileKey);
             await uploadByPresignedUrl(uploadUrl, row.localPath);
           } else {
-            await deleteByApiEndpoint(hookEnv.apiHookUrl, hookEnv.apiHookApiKey, row.fileKey);
+            await deleteByApiEndpoint(queueConfig.apiHookUrl, queueConfig.apiHookApiKey, row.fileKey);
           }
 
           markJobFileStatus(sqlite, job.id, row.fileKey, 'done', null);

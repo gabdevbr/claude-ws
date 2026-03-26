@@ -21,7 +21,7 @@ export interface ManifestEntry {
   url: string;
 }
 
-interface HookEnv {
+interface QueueConfig {
   apiHookUrl: string;
   apiHookApiKey: string;
   projectId: string;
@@ -242,45 +242,16 @@ async function openExistingPullQueueDb(projectPath: string): Promise<Database.Da
   return sqlite;
 }
 
-async function readHookEnv(projectPath: string, fallbackProjectId: string): Promise<HookEnv> {
-  // Auto-migrate if .env exists but hook.env doesn't
-  const { validateHookEnv, readHookEnv: readHookEnvFromFile, ensureHookEnv, upgradeHookEnv, getHookEnvConfigFromServerEnv } = await import('@/lib/hook-env-manager');
-
-  const validation = await validateHookEnv(projectPath, ['PROJECT_ID']);
-
-  if (!validation.exists) {
-    console.error(`⚠️  Project ${projectPath} missing hook.env, auto-recreating...`);
-
-    // Auto-recreate from server config
-    const serverConfig = await getHookEnvConfigFromServerEnv(fallbackProjectId, projectPath);
-    await ensureHookEnv(projectPath, fallbackProjectId, serverConfig);
-
-    console.error(`✅ Recreated hook.env for ${projectPath}`);
-  } else if (!validation.valid) {
-    console.error(`⚠️  Project ${projectPath} has invalid hook.env, auto-upgrading...`);
-
-    await upgradeHookEnv(projectPath, fallbackProjectId);
-
-    console.error(`✅ Upgraded hook.env for ${projectPath}`);
-  }
-
-  // Read using centralized manager
-  const env = await readHookEnvFromFile(projectPath, fallbackProjectId);
-
-  // Resolve API hook URL
-  const apiHookUrl = env.apiHookUrl || '';
+function resolveQueueConfig(projectId: string): QueueConfig {
+  const apiHookUrl = resolveApiHookUrl(undefined, undefined, projectId);
   if (!apiHookUrl) {
-    throw new Error(
-      'API_HOOK_URL not configured in hook.env or server .env. ' +
-      'hook.env now only contains PROJECT_ID. ' +
-      'Please check server configuration.'
-    );
+    throw new Error(`API_HOOK_URL is not configured from server .env for project ${projectId}.`);
   }
 
   return {
     apiHookUrl,
-    apiHookApiKey: env.apiHookApiKey || process.env.API_HOOK_API_KEY || '',
-    projectId: env.projectId || fallbackProjectId
+    apiHookApiKey: process.env.API_HOOK_API_KEY || '',
+    projectId,
   };
 }
 
@@ -529,24 +500,24 @@ function enqueueInDb(
   return { jobId, counts };
 }
 
-export async function enqueueProjectPullSync(projectPath: string, fallbackProjectId: string) {
-  const hookEnv = await readHookEnv(projectPath, fallbackProjectId);
+export async function enqueueProjectPullSync(projectPath: string, projectId: string) {
+  const queueConfig = resolveQueueConfig(projectId);
   const sqlite = await ensurePullQueueDb(projectPath);
 
   try {
     const candidates = await fetchQueueCandidates(
-      hookEnv.apiHookUrl,
-      hookEnv.apiHookApiKey,
+      queueConfig.apiHookUrl,
+      queueConfig.apiHookApiKey,
       projectPath,
-      hookEnv.projectId,
+      queueConfig.projectId,
       sqlite
     );
-    const { jobId, counts } = enqueueInDb(sqlite, hookEnv.projectId, candidates);
+    const { jobId, counts } = enqueueInDb(sqlite, queueConfig.projectId, candidates);
     return {
       jobId,
       counts,
       dbPath: getPullQueueDbPath(projectPath),
-      projectId: hookEnv.projectId,
+      projectId: queueConfig.projectId,
     };
   } finally {
     sqlite.close();
@@ -814,12 +785,12 @@ async function processJob(projectPath: string, projectId: string, job: PendingJo
       return;
     }
 
-    const hookEnv = await readHookEnv(projectPath, projectId);
+    const queueConfig = resolveQueueConfig(projectId);
     const candidates = await fetchQueueCandidates(
-      hookEnv.apiHookUrl,
-      hookEnv.apiHookApiKey,
+      queueConfig.apiHookUrl,
+      queueConfig.apiHookApiKey,
       projectPath,
-      hookEnv.projectId,
+      queueConfig.projectId,
       sqlite
     );
     const manifestMap = new Map(candidates.map((entry) => [entry.key, entry]));
@@ -878,7 +849,7 @@ async function processJob(projectPath: string, projectId: string, job: PendingJo
 
         try {
           if (row.fingerprint.startsWith('delete-local:')) {
-            await deleteLocalFileByKey(projectPath, row.fileKey, hookEnv.projectId, row.folder);
+            await deleteLocalFileByKey(projectPath, row.fileKey, queueConfig.projectId, row.folder);
             markJobFileStatus(sqlite, job.id, row.fileKey, 'done', null);
             upsertFileState(
               sqlite,
@@ -895,10 +866,10 @@ async function processJob(projectPath: string, projectId: string, job: PendingJo
           }
 
           if (candidate.sourceKey) {
-            const moved = await moveLocalFileByKey(projectPath, candidate.sourceKey, row.fileKey, hookEnv.projectId, row.folder);
+            const moved = await moveLocalFileByKey(projectPath, candidate.sourceKey, row.fileKey, queueConfig.projectId, row.folder);
             if (moved) {
               const remoteDate = new Date(candidate.lastModified);
-              const movedPath = getLocalPath(projectPath, row.fileKey, hookEnv.projectId, row.folder);
+              const movedPath = getLocalPath(projectPath, row.fileKey, queueConfig.projectId, row.folder);
               await fs.utimes(movedPath, remoteDate, remoteDate).catch(() => undefined);
 
               markJobFileStatus(sqlite, job.id, row.fileKey, 'done', null);
@@ -919,8 +890,8 @@ async function processJob(projectPath: string, projectId: string, job: PendingJo
           }
 
           const manifestEntry = await fetchManifest(
-            hookEnv.apiHookUrl,
-            hookEnv.apiHookApiKey,
+            queueConfig.apiHookUrl,
+            queueConfig.apiHookApiKey,
             row.folder,
             row.folder === 'markdown' ? { root: 'markdown' } : undefined
           );
@@ -930,7 +901,7 @@ async function processJob(projectPath: string, projectId: string, job: PendingJo
             return;
           }
 
-          const destination = getLocalPath(projectPath, latest.key, hookEnv.projectId, row.folder);
+          const destination = getLocalPath(projectPath, latest.key, queueConfig.projectId, row.folder);
           await downloadFile(latest.url, destination);
 
           const remoteDate = new Date(latest.lastModified);

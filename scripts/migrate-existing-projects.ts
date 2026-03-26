@@ -3,10 +3,9 @@
  * Migrate existing projects to current default Claude workspace structure.
  *
  * What it does per project:
- * - Ensures `.claude/hooks` and `.claude/commands` exist
- * - Syncs hook templates (`minio-pull-sync.ts`, `minio-push-sync.ts`)
- * - Ensures `.claude/hooks/hook.env.example`, `.claude/settings.json`, `.claude/CLAUDE.md`
- * - Creates `.claude/hooks/hook.env` when missing
+ * - Syncs hook templates (`minio-pull-sync.ts`, `minio-push-sync.ts`) with injected project id
+ * - Syncs `.claude/settings.json` and `.claude/CLAUDE.md` from template
+ * - Removes legacy hook env files (`hook.env`, `.env`, `hook.env.example`, `.env.example`)
  *
  * Usage:
  *   pnpm projects:migrate:defaults
@@ -14,7 +13,7 @@
 
 import path from 'path';
 import fs from 'fs';
-import { config, parse as parseDotenv } from 'dotenv';
+import { config } from 'dotenv';
 import { db, schema } from '../src/lib/db';
 import { setupProjectDefaults } from '../src/lib/project-utils';
 
@@ -25,41 +24,24 @@ type ProjectTarget = {
 };
 
 function inferProjectIdFromDirName(dirName: string): string {
-  // Folders may be: "<projectId>" or "<projectId>-<name>"
   const firstDash = dirName.indexOf('-');
   if (firstDash <= 0) return dirName;
   return dirName.slice(0, firstDash);
 }
 
-function getProjectIdFromHookEnv(projectPath: string): string | null {
+function removeLegacyHookEnvFiles(projectPath: string): number {
   const hooksDir = path.join(projectPath, '.claude', 'hooks');
-  const hookEnvPath = path.join(hooksDir, 'hook.env');
-  const legacyEnvPath = path.join(hooksDir, '.env');
-  const envPath = fs.existsSync(hookEnvPath) ? hookEnvPath : legacyEnvPath;
-  if (!fs.existsSync(envPath)) return null;
+  const legacyFiles = ['hook.env', '.env', 'hook.env.example', '.env.example'];
+  let removed = 0;
 
-  try {
-    const parsed = parseDotenv(fs.readFileSync(envPath, 'utf-8'));
-    const projectId = (parsed.PROJECT_ID || '').trim();
-    return projectId || null;
-  } catch {
-    return null;
-  }
-}
-
-function syncProjectHookEnv(projectPath: string, projectId: string): { updated: boolean; reason: string } {
-  const hooksDir = path.join(projectPath, '.claude', 'hooks');
-  const envPath = path.join(hooksDir, 'hook.env');
-  fs.mkdirSync(hooksDir, { recursive: true });
-
-  const normalized = `# ================================================\n# Claude Workspace - Hook Environment Configuration\n# ================================================\n# This file is intentionally minimal.\n# Sync configuration is loaded from workspace root .env.\n\n# Project ID (REQUIRED)\n# Unique identifier for this project\nPROJECT_ID=${projectId}\n`;
-  const content = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf-8') : '';
-  if (normalized === content) {
-    return { updated: false, reason: 'already-correct' };
+  for (const fileName of legacyFiles) {
+    const filePath = path.join(hooksDir, fileName);
+    if (!fs.existsSync(filePath)) continue;
+    fs.rmSync(filePath, { force: true });
+    removed += 1;
   }
 
-  fs.writeFileSync(envPath, normalized, 'utf-8');
-  return { updated: true, reason: 'env-repaired' };
+  return removed;
 }
 
 async function run(): Promise<void> {
@@ -71,7 +53,6 @@ async function run(): Promise<void> {
 
   const targets = new Map<string, ProjectTarget>();
 
-  // 1) Projects tracked in DB
   const dbProjects = db.select({
     id: schema.projects.id,
     path: schema.projects.path,
@@ -85,16 +66,14 @@ async function run(): Promise<void> {
     });
   }
 
-  // 2) Extra dirs under data/projects not present in DB
   if (fs.existsSync(projectsDir)) {
     const entries = fs.readdirSync(projectsDir, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const projectPath = path.resolve(path.join(projectsDir, entry.name));
       if (targets.has(projectPath)) continue;
-      const existingProjectId = getProjectIdFromHookEnv(projectPath);
       targets.set(projectPath, {
-        id: existingProjectId || inferProjectIdFromDirName(entry.name),
+        id: inferProjectIdFromDirName(entry.name),
         projectPath,
         source: 'scan',
       });
@@ -111,7 +90,7 @@ async function run(): Promise<void> {
   let ok = 0;
   let skipped = 0;
   let failed = 0;
-  let envRepaired = 0;
+  let legacyRemoved = 0;
 
   for (const target of targets.values()) {
     try {
@@ -121,9 +100,9 @@ async function run(): Promise<void> {
         continue;
       }
 
-      await setupProjectDefaults(target.projectPath, target.id, workspaceRoot);
-      const envResult = syncProjectHookEnv(target.projectPath, target.id);
-      if (envResult.updated) envRepaired++;
+      await setupProjectDefaults(target.projectPath, target.id, workspaceRoot, { useHookTemplate: true });
+      legacyRemoved += removeLegacyHookEnvFiles(target.projectPath);
+
       console.log(`[projects:migrate:defaults] OK ${target.source} id=${target.id} path=${target.projectPath}`);
       ok++;
     } catch (error) {
@@ -132,7 +111,7 @@ async function run(): Promise<void> {
     }
   }
 
-  console.log(`[projects:migrate:defaults] Done. ok=${ok} skipped=${skipped} failed=${failed} envRepaired=${envRepaired}`);
+  console.log(`[projects:migrate:defaults] Done. ok=${ok} skipped=${skipped} failed=${failed} legacyRemoved=${legacyRemoved}`);
   if (failed > 0) process.exit(1);
 }
 
