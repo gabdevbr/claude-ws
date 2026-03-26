@@ -22,6 +22,7 @@ import { PromptInput } from '@/components/task/prompt-input';
 import { useTaskStore } from '@/stores/task-store';
 import { useProjectStore } from '@/stores/project-store';
 import { useAttachmentStore } from '@/stores/attachment-store';
+import { useContextMentionStore } from '@/stores/context-mention-store';
 import { useModelStore } from '@/stores/model-store';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Label } from '@/components/ui/label';
@@ -48,6 +49,7 @@ export function CreateTaskDialog({ open, onOpenChange, onTaskCreated }: CreateTa
     getSelectedProjects
   } = useProjectStore();
   const { getUploadedFileIds, clearFiles, getPendingFiles, moveFiles, hasUploadingFiles } = useAttachmentStore();
+  const { buildPromptWithMentions, getMentions, clearMentions } = useContextMentionStore();
   const { taskModels, setModel } = useModelStore();
 
   const [title, setTitle] = useState('');
@@ -105,10 +107,19 @@ export function CreateTaskDialog({ open, onOpenChange, onTaskCreated }: CreateTa
     setError(null);
 
     try {
-      // Process commands before creating task
+      // Process mentions before creating task
       let finalPrompt = chatPrompt.trim();
       let descriptionForTask = chatPrompt.trim(); // Default to original input
       let processedPrompt: string | undefined;
+
+      // Process @file mentions from context-mention-store
+      const mentions = tempTaskId ? getMentions(tempTaskId) : [];
+      if (mentions.length > 0 && tempTaskId) {
+        const mentionResult = buildPromptWithMentions(tempTaskId, finalPrompt);
+        finalPrompt = mentionResult.finalPrompt;
+        descriptionForTask = mentionResult.displayPrompt;
+        processedPrompt = finalPrompt;
+      }
 
       // Check if it's a command (starts with /)
       if (finalPrompt.startsWith('/')) {
@@ -163,6 +174,9 @@ export function CreateTaskDialog({ open, onOpenChange, onTaskCreated }: CreateTa
       // Notify parent that task was created (with fileIds)
       onTaskCreated?.(task, startNow, processedPrompt, fileIds.length > 0 ? fileIds : undefined);
 
+      // Clear mentions for the temp task
+      if (tempTaskId) clearMentions(tempTaskId);
+
       // Reset form and clear temp task ID before closing dialog
       // This ensures PromptInput gets a new key and clears its state
       setTitle('');
@@ -179,9 +193,10 @@ export function CreateTaskDialog({ open, onOpenChange, onTaskCreated }: CreateTa
   const handleOpenChange = (newOpen: boolean) => {
     if (!isSubmitting) {
       if (!newOpen) {
-        // Clear temp files when dialog is closed
+        // Clear temp files and mentions when dialog is closed
         if (tempTaskId) {
           clearFiles(tempTaskId);
+          clearMentions(tempTaskId);
         }
         setTitle('');
         setChatPrompt('');

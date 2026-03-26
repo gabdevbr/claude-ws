@@ -11,6 +11,7 @@ import { getToolIcon, getToolActiveVerb, getToolDisplay, getResultSummary } from
 import { BashBlock } from './tool-use-block-bash-command-renderer';
 import { TodoListBlock, type TodoItem } from './tool-use-block-todo-list-renderer';
 import { EditBlock } from './tool-use-block-edit-diff-renderer';
+import { WriteBlock } from './tool-use-block-write-diff-renderer';
 import { AgentSpawnedCard } from './agent-spawned-card';
 
 interface ToolUseBlockProps {
@@ -57,13 +58,15 @@ export const ToolUseBlock = memo(function ToolUseBlock({ name, id, input, result
   // Determine if we have special display modes
   const isBash = name === 'Bash';
   const isEdit = name === 'Edit';
+  const isWrite = name === 'Write';
   const isTodoWrite = name === 'TodoWrite';
   const isAskUserQuestion = name === 'AskUserQuestion';
   const hasEditDiff = isEdit && Boolean(inputObj?.old_string) && Boolean(inputObj?.new_string);
+  const hasWriteContent = isWrite && Boolean(inputObj?.content);
   const hasTodos = isTodoWrite && Array.isArray(inputObj?.todos) && (inputObj.todos as TodoItem[]).length > 0;
 
-  // For bash, edit with diff, and todo list, we show expanded content differently
-  const showSpecialView = isBash || hasEditDiff || hasTodos;
+  // For bash, edit with diff, write with content, and todo list, we show expanded content differently
+  const showSpecialView = isBash || hasEditDiff || hasWriteContent || hasTodos;
 
   // For other tools, check if we have expandable details
   const hasOtherDetails = !showSpecialView && Boolean(result || (inputObj && Object.keys(inputObj).length > 1));
@@ -163,6 +166,13 @@ export const ToolUseBlock = memo(function ToolUseBlock({ name, id, input, result
       {hasEditDiff && (
         <div className="mt-1.5 ml-5 w-full max-w-full overflow-hidden pr-5">
           <EditBlock input={inputObj} result={result} isError={isError} />
+        </div>
+      )}
+
+      {/* Special view for Write with diff */}
+      {hasWriteContent && (
+        <div className="mt-1.5 ml-5 w-full max-w-full overflow-hidden pr-5">
+          <WriteBlock input={inputObj} result={result} isError={isError} />
         </div>
       )}
 

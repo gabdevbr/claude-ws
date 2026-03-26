@@ -50,7 +50,8 @@ export function TaskDetailPanel({ className }: TaskDetailPanelProps) {
   const { shells } = useShellStore();
 
   // Declared early so useEffect hooks can reference it before the early return
-  const currentProjectId = activeProjectId || selectedProjectIds[0] || selectedTask?.projectId;
+  // Prioritize the task's own project over the globally active project
+  const currentProjectId = selectedTask?.projectId || activeProjectId || selectedProjectIds[0];
 
   const { width, isResizing, handleMouseDown: handleResizeMouseDown } = useResizable({
     initialWidth: widths.taskDetail,

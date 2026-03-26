@@ -125,6 +125,7 @@ export function PromptInputFormBody({
           onSelect={onFileSelect}
           onClose={onFileMentionClose}
           visible={showFileMention}
+          projectPath={projectPath}
         />
 
         <div className="rounded-md border border-input overflow-hidden bg-background w-full max-w-full">

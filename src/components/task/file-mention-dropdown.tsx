@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Folder, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useActiveProject } from '@/hooks/use-active-project';
 import { FileIcon } from '@/components/sidebar/file-browser/file-icon';
 
 interface FileResult {
@@ -18,6 +17,7 @@ interface FileMentionDropdownProps {
   onSelect: (filePath: string) => void;
   onClose: () => void;
   visible: boolean;
+  projectPath?: string;
 }
 
 export function FileMentionDropdown({
@@ -25,16 +25,16 @@ export function FileMentionDropdown({
   onSelect,
   onClose,
   visible,
+  projectPath,
 }: FileMentionDropdownProps) {
   const [results, setResults] = useState<FileResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const activeProject = useActiveProject();
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Search files when query changes
   useEffect(() => {
-    if (!visible || !activeProject?.path || query.length === 0) {
+    if (!visible || !projectPath || query.length === 0) {
       setResults([]);
       return;
     }
@@ -43,7 +43,7 @@ export function FileMentionDropdown({
       setLoading(true);
       try {
         const res = await fetch(
-          `/api/files/search?basePath=${encodeURIComponent(activeProject.path)}&query=${encodeURIComponent(query)}&limit=10`
+          `/api/files/search?basePath=${encodeURIComponent(projectPath)}&query=${encodeURIComponent(query)}&limit=10`
         );
         if (res.ok) {
           const data = await res.json();
@@ -59,7 +59,7 @@ export function FileMentionDropdown({
 
     const debounce = setTimeout(searchFiles, 150);
     return () => clearTimeout(debounce);
-  }, [query, visible, activeProject?.path]);
+  }, [query, visible, projectPath]);
 
   // Handle keyboard navigation
   const handleKeyDown = useCallback(
