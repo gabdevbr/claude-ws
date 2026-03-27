@@ -9,6 +9,7 @@ import { useSidebarStore } from '@/stores/sidebar-store';
 import { useActiveProject } from '@/hooks/use-active-project';
 import type { FileEntry } from '@/types';
 import { FileCreateButtons } from './file-create-buttons';
+import { FileBrowserDialog } from './file-browser-dialog';
 import { useTranslations } from 'next-intl';
 
 interface FileTreeProps {
@@ -26,6 +27,7 @@ export function FileTree({ onFileSelect }: FileTreeProps) {
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [searchResults, setSearchResults] = useState<SearchResults | null>(null);
+  const [fileBrowserOpen, setFileBrowserOpen] = useState(false);
   const isComponentMountedRef = useRef(true); const fetchedKeyRef = useRef<string | null>(null);
 
   // Fetch file tree
@@ -96,6 +98,12 @@ export function FileTree({ onFileSelect }: FileTreeProps) {
   );
 
   const handleSearchChange = useCallback((results: SearchResults | null) => { setSearchResults(results); }, []);
+
+  const handleOpenFileBrowser = useCallback(() => { setFileBrowserOpen(true); }, []);
+
+  const handleFileBrowserSelect = useCallback((filePath: string) => {
+    handleFileClick(filePath);
+  }, [handleFileClick]);
 
   // Get root directory entry for creating files/folders at project root
   const rootEntry: FileEntry = {
@@ -184,6 +192,7 @@ export function FileTree({ onFileSelect }: FileTreeProps) {
           className="flex-1"
           onRefresh={handleRefresh}
           refreshing={loading}
+          onOpenFile={handleOpenFileBrowser}
         />
       </div>
 
@@ -195,6 +204,14 @@ export function FileTree({ onFileSelect }: FileTreeProps) {
           <div className="py-1">{renderTree(entries)}</div>
         )}
       </ScrollArea>
+
+      {/* File browser dialog for opening files from anywhere on the filesystem */}
+      <FileBrowserDialog
+        open={fileBrowserOpen}
+        onOpenChange={setFileBrowserOpen}
+        onFileSelect={handleFileBrowserSelect}
+        initialPath={activeProject?.path}
+      />
     </div>
   );
 }

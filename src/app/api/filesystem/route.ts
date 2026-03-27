@@ -31,6 +31,8 @@ export async function GET(request: NextRequest) {
 
     // Filter to only directories, exclude hidden by default
     const showHidden = searchParams.get('showHidden') === 'true';
+    const includeFiles = searchParams.get('includeFiles') === 'true';
+
     const directories = entries
       .filter((entry) => {
         if (!entry.isDirectory()) return false;
@@ -44,6 +46,24 @@ export async function GET(request: NextRequest) {
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
+    // Optionally include files in the response
+    let files: { name: string; path: string; isDirectory: boolean; size: number }[] = [];
+    if (includeFiles) {
+      files = entries
+        .filter((entry) => {
+          if (!entry.isFile()) return false;
+          if (!showHidden && entry.name.startsWith('.')) return false;
+          return true;
+        })
+        .map((entry) => {
+          const filePath = path.join(dirPath, entry.name);
+          let size = 0;
+          try { size = fs.statSync(filePath).size; } catch {}
+          return { name: entry.name, path: filePath, isDirectory: false, size };
+        })
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }
+
     // Get parent directory
     const parentPath = path.dirname(dirPath);
     const canGoUp = parentPath !== dirPath;
@@ -52,6 +72,7 @@ export async function GET(request: NextRequest) {
       currentPath: dirPath,
       parentPath: canGoUp ? parentPath : null,
       directories,
+      ...(includeFiles ? { files } : {}),
       homePath: os.homedir(),
     });
   } catch (error) {

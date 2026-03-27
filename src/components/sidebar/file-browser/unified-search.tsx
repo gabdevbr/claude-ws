@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, X, FileText, FileCode, RefreshCw } from 'lucide-react';
+import { Search, X, FileText, FileCode, RefreshCw, FolderOpen } from 'lucide-react';
 import { useTranslations } from 'next-intl';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -26,13 +26,14 @@ interface UnifiedSearchProps {
   className?: string;
   onRefresh?: () => void;
   refreshing?: boolean;
+  onOpenFile?: () => void;
 }
 
 /**
  * UnifiedSearch - Search input with mode filter tabs (files / content / all).
  * Calls onSearchChange with results; SearchResultsView renders them separately.
  */
-export function UnifiedSearch({ onSearchChange, className, onRefresh, refreshing }: UnifiedSearchProps) {
+export function UnifiedSearch({ onSearchChange, className, onRefresh, refreshing, onOpenFile }: UnifiedSearchProps) {
   const t = useTranslations('sidebar');
   const activeProject = useActiveProject();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -127,6 +128,17 @@ export function UnifiedSearch({ onSearchChange, className, onRefresh, refreshing
           {query && (
             <Button variant="ghost" size="icon" className="size-6" onClick={handleClear}>
               <X className="size-3" />
+            </Button>
+          )}
+          {onOpenFile && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-6"
+              onClick={onOpenFile}
+              title={t('openFile')}
+            >
+              <FolderOpen className="size-3" />
             </Button>
           )}
           {onRefresh && (

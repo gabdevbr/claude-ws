@@ -11,6 +11,22 @@ interface UseFileTabContentLoaderOptions {
 }
 
 /**
+ * Resolve basePath and relative path for the file content API.
+ * If filePath is absolute and outside the project, use the file's parent dir as basePath.
+ */
+export function resolveFileApiPaths(filePath: string, projectPath: string) {
+  const isAbsolute = filePath.startsWith('/');
+  if (isAbsolute && !filePath.startsWith(projectPath + '/') && filePath !== projectPath) {
+    const lastSlash = filePath.lastIndexOf('/');
+    return {
+      basePath: filePath.substring(0, lastSlash) || '/',
+      relativePath: filePath.substring(lastSlash + 1),
+    };
+  }
+  return { basePath: projectPath, relativePath: filePath };
+}
+
+/**
  * useFileTabContentLoader - Fetches file content from the server when filePath changes.
  * Calls onLoaded with the response data or onReset when filePath/project is cleared.
  * Extracted from use-file-tab-state to keep it under 200 lines.
@@ -41,8 +57,9 @@ export function useFileTabContentLoader({
       setLoading(true);
       setError(null);
       try {
+        const { basePath, relativePath } = resolveFileApiPaths(filePath, activeProjectPath);
         const res = await fetch(
-          `/api/files/content?basePath=${encodeURIComponent(activeProjectPath)}&path=${encodeURIComponent(filePath)}`
+          `/api/files/content?basePath=${encodeURIComponent(basePath)}&path=${encodeURIComponent(relativePath)}`
         );
         if (!res.ok) {
           const data = await res.json();

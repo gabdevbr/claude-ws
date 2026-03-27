@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import type { FileContent } from './use-file-tab-state';
+import { resolveFileApiPaths } from './use-file-tab-content-loader';
 
 interface UseFileTabSaveCopyDownloadOperationsOptions {
   filePath: string;
@@ -37,12 +38,13 @@ export function useFileTabSaveCopyDownloadOperations({
 
     setSaveStatus('saving');
     try {
+      const { basePath, relativePath } = resolveFileApiPaths(filePath, activeProjectPath);
       const res = await fetch('/api/files/content', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          basePath: activeProjectPath,
-          path: filePath,
+          basePath,
+          path: relativePath,
           content: editedContent,
         }),
       });
