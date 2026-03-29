@@ -214,15 +214,19 @@ class AgentManager extends EventEmitter {
 
     // Resolve provider first, then model based on provider type
     const provider = requestedProvider ? getProvider(requestedProvider) : getActiveProvider();
+    // CLI provider: only pass model if explicitly requested — let CLI use its own default
+    // SDK provider: fall back to env-configured model or FALLBACK_MODEL_ID
     const effectiveModel = provider.id === 'claude-cli'
-      ? (model?.trim() || FALLBACK_MODEL_ID)
+      ? (model?.trim() || undefined)
       : (model?.trim() || resolveDefaultModelFromEnv());
 
     // Build model identity and project context for system prompt
-    const modelDisplayName = modelIdToDisplayName(effectiveModel);
-    const modelIdentity = modelDisplayName !== effectiveModel
-      ? `You are powered by the model named ${modelDisplayName}. The exact model ID is ${effectiveModel}.`
-      : `You are powered by the model ${effectiveModel}.`;
+    const modelDisplayName = effectiveModel ? modelIdToDisplayName(effectiveModel) : undefined;
+    const modelIdentity = effectiveModel
+      ? (modelDisplayName !== effectiveModel
+        ? `You are powered by the model named ${modelDisplayName}. The exact model ID is ${effectiveModel}.`
+        : `You are powered by the model ${effectiveModel}.`)
+      : '';
     const projectContext = `Your current working directory is ${projectPath}. All file operations should use paths relative to or within this directory.`;
 
     // Wire up provider events for this attempt
@@ -236,7 +240,7 @@ class AgentManager extends EventEmitter {
         model: effectiveModel,
         sessionOptions,
         maxTurns,
-        systemPromptAppend: `${modelIdentity}\n${projectContext}`,
+        systemPromptAppend: modelIdentity ? `${modelIdentity}\n${projectContext}` : projectContext,
         outputFormat,
         outputSchema,
       });
