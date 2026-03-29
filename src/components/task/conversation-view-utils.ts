@@ -148,6 +148,32 @@ export function isToolExecuting(
 }
 
 /**
+ * Check if any content block is currently showing its own inline streaming indicator.
+ * True when: last tool is executing, or last content block is an active thinking block.
+ */
+export function hasInlineStreamingIndicator(
+  messages: ClaudeOutput[],
+  lastToolUseId: string | null,
+  toolResultsMap: Map<string, ToolResult>,
+): boolean {
+  // Tool executing → ToolUseBlock shows its own RunningDots
+  if (lastToolUseId && !toolResultsMap.has(lastToolUseId)) return true;
+
+  // Last content block is thinking with no later blocks → MessageBlock shows its own RunningDots
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.type === 'assistant' && msg.message?.content?.length) {
+      const blocks = msg.message.content;
+      const last = blocks[blocks.length - 1];
+      if (last?.type === 'thinking' && last.thinking) return true;
+      break; // only check the last assistant message
+    }
+  }
+
+  return false;
+}
+
+/**
  * Extract tracked tasks from messages (TaskCreate/TaskUpdate tool calls + results).
  * Builds a consolidated task list by scanning tool_use blocks and matching results.
  */

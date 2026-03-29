@@ -25,10 +25,11 @@ import { useButlerNotifications } from '@/hooks/use-butler-notifications';
 import { useProjectStore } from '@/stores/project-store';
 import { useFloatingWindowsStore } from '@/stores/floating-windows-store';
 import { useTaskStore } from '@/stores/task-store';
+import { useButlerStore } from '@/stores/butler-store';
 import type { ButlerNotificationItem } from '@/stores/butler-store';
 import { useTranslations } from 'next-intl';
 import { cn } from '@/lib/utils';
-import { AlertCircle, Bell, Clock, Plus } from 'lucide-react';
+import { AlertCircle, Bell, Calendar, Clock, Plus } from 'lucide-react';
 
 const MAX_DISPLAY_NOTIFICATIONS = 5;
 
@@ -102,17 +103,9 @@ export function ButlerStatusIndicator() {
   const displayLimit = Math.max(unreadCount, MAX_DISPLAY_NOTIFICATIONS);
   const displayNotifications = notifications.slice(0, displayLimit);
 
-  const { createTask } = useTaskStore();
-
-  const handleStartButlerTask = async () => {
+  const handleStartButlerTask = () => {
     if (!projectId) return;
-    try {
-      const task = await createTask(projectId, 'New Butler Task', null);
-      useFloatingWindowsStore.getState().openWindow(task.id, 'chat', projectId);
-      useTaskStore.getState().setSelectedTaskId(task.id);
-    } catch {
-      // Task creation failed — no-op
-    }
+    useButlerStore.getState().setCreateTaskDialogOpen(true);
   };
 
   const handleEnableToggle = async () => {
@@ -222,10 +215,16 @@ export function ButlerStatusIndicator() {
           </div>
         )}
         {projectId && (
-          <DropdownMenuItem onClick={handleStartButlerTask}>
-            <Plus className="h-4 w-4 mr-2" />
-            {t('startTask')}
-          </DropdownMenuItem>
+          <>
+            <DropdownMenuItem onClick={handleStartButlerTask}>
+              <Plus className="h-4 w-4 mr-2" />
+              {t('startTask')}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => useButlerStore.getState().setSchedulerDialogOpen(true)}>
+              <Calendar className="h-4 w-4 mr-2" />
+              {t('schedulerMenu')}
+            </DropdownMenuItem>
+          </>
         )}
         <DropdownMenuItem onClick={handleClick}>
           {t('openProject')}

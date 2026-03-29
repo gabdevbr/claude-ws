@@ -810,7 +810,22 @@
     "minutesAgo": "{m}m ago",
     "hoursAgo": "{h}h ago",
     "daysAgo": "{d}d ago",
-    "startTask": "Butler Task"
+    "startTask": "Butler Task",
+    "schedulerMenu": "Manage Schedulers",
+    "schedulerTitle": "Butler Schedulers",
+    "schedulerLoading": "Loading schedulers...",
+    "schedulerEmpty": "No schedulers configured",
+    "schedulerActive": "Active",
+    "schedulerStopped": "Stopped",
+    "schedulerStale": "Stale",
+    "schedulerEnable": "Enable",
+    "schedulerDisable": "Disable",
+    "schedulerEdit": "Edit",
+    "schedulerDelete": "Delete",
+    "schedulerConfirmDelete": "Confirm delete",
+    "schedulerLastRun": "Last run",
+    "schedulerNextRun": "Next run",
+    "schedulerCopyCommand": "Copy command"
   },
   "globalError": {
     "title": "Something went wrong!",

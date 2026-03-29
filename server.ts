@@ -367,6 +367,9 @@ app.prepare().then(async () => {
               task = await db.query.tasks.findFirst({
                 where: eq(schema.tasks.id, taskId),
               });
+
+              // Broadcast to frontend so kanban board updates in realtime
+              if (task) io.emit('task:created', task);
             } catch (error) {
               log.error({ error }, '[Socket] Failed to create task');
               socket.emit('error', { message: 'Failed to create task' });

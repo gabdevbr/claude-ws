@@ -1,8 +1,12 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import type { ClaudeOutput } from '@/types';
 
 /**
  * Hook that manages auto-scroll behaviour for ConversationView.
+ *
+ * Always uses the ScrollArea viewport as the scroll container.
+ * The floating-chat wrapper uses h-full to ensure the viewport scrolls
+ * (not the detached-scroll-container ancestor).
  *
  * - Scrolls to bottom when new messages arrive (if already near bottom).
  * - Always scrolls to bottom when a new attempt starts.
@@ -17,25 +21,20 @@ export function useConversationAutoScroll(
   isRunning: boolean,
   isLoading: boolean
 ) {
+  const getViewport = (): HTMLElement | null => {
+    return scrollAreaRef.current?.querySelector('[data-slot="scroll-area-viewport"]') as HTMLElement | null;
+  };
+
   const isNearBottom = () => {
-    const detachedContainer = scrollAreaRef.current?.closest('[data-detached-scroll-container]');
-    if (detachedContainer) {
-      return detachedContainer.scrollHeight - detachedContainer.scrollTop - detachedContainer.clientHeight < 5;
-    }
-    const viewport = scrollAreaRef.current?.querySelector('[data-slot="scroll-area-viewport"]');
+    const viewport = getViewport();
     if (!viewport) return true;
     return viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight < 5;
   };
 
   const scrollToBottom = () => {
-    const detachedContainer = scrollAreaRef.current?.closest('[data-detached-scroll-container]');
-    if (detachedContainer) {
-      detachedContainer.scrollTop = detachedContainer.scrollHeight;
-    } else {
-      const viewport = scrollAreaRef.current?.querySelector('[data-slot="scroll-area-viewport"]');
-      if (viewport) {
-        viewport.scrollTop = viewport.scrollHeight;
-      }
+    const viewport = getViewport();
+    if (viewport) {
+      viewport.scrollTop = viewport.scrollHeight;
     }
   };
 
@@ -90,8 +89,7 @@ export function useConversationAutoScroll(
       lastScrollTop = currentScrollTop;
     };
 
-    const detachedContainer = contentContainer.closest('[data-detached-scroll-container]');
-    const viewport = detachedContainer || contentContainer.querySelector('[data-slot="scroll-area-viewport"]');
+    const viewport = contentContainer.querySelector('[data-slot="scroll-area-viewport"]');
     viewport?.addEventListener('scroll', handleScroll, { passive: true });
 
     return () => {

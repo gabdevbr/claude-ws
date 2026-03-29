@@ -10,13 +10,15 @@ import { AuthErrorMessage } from '@/components/auth/auth-error-message';
 import { cn } from '@/lib/utils';
 import type { ClaudeOutput, PendingFile } from '@/types';
 import { useTranslations } from 'next-intl';
-import { buildToolResultsMap, hasVisibleContent, findAuthError, findLastToolUseId, buildTrackedTasksFromMessages } from './conversation-view-utils';
+import { buildToolResultsMap, hasVisibleContent, hasInlineStreamingIndicator, findAuthError, findLastToolUseId, buildTrackedTasksFromMessages } from './conversation-view-utils';
 import type { ActiveQuestion, ConversationTurn } from './conversation-view-utils';
 import { useConversationAutoScroll } from './use-conversation-auto-scroll';
+import { useUserMessageNavigation } from './use-user-message-navigation';
 import { renderMessage } from './conversation-view-content-block-renderer';
 import { ConversationHistoricalUserTurn } from './conversation-view-historical-user-turn';
 import { ConversationHistoricalAssistantTurn } from './conversation-view-historical-assistant-turn';
 import { ConversationViewStreamingPromptBubble } from './conversation-view-streaming-prompt-bubble';
+import { ConversationViewUserMessageNavButtons } from './conversation-view-user-message-nav-buttons';
 import * as taskApiService from '@/lib/services/task-api-service';
 
 interface ConversationViewProps {
@@ -65,7 +67,22 @@ export function ConversationView({
   const currentLastToolUseId = useMemo(() => findLastToolUseId(currentMessages), [currentMessages]);
   const trackedTasks = useMemo(() => buildTrackedTasksFromMessages(currentMessages), [currentMessages]);
 
+  // Show running dots immediately when no content, or after 2s idle when content exists
+  const hasContent = useMemo(() => hasVisibleContent(currentMessages), [currentMessages]);
+  const [showIdleDots, setShowIdleDots] = useState(false);
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    setShowIdleDots(false);
+    if (isRunning && hasContent) {
+      idleTimerRef.current = setTimeout(() => setShowIdleDots(true), 2000);
+    }
+    return () => { if (idleTimerRef.current) clearTimeout(idleTimerRef.current); };
+  }, [isRunning, hasContent, currentMessages.length]);
+
   useConversationAutoScroll(scrollAreaRef, currentMessages, historicalTurns, isRunning, isLoading);
+  const { showNav, goToPrev, goToNext } = useUserMessageNavigation(scrollAreaRef, !isLoading);
 
   const loadHistory = async (forceRefresh = false) => {
     if (!forceRefresh && effectiveLastFetchedRef.current === taskId) return;
@@ -185,7 +202,8 @@ export function ConversationView({
           </>
         )}
 
-        {isRunning && !hasVisibleContent(currentMessages)
+        {isRunning
+          && (!hasContent || (showIdleDots && !hasInlineStreamingIndicator(currentMessages, currentLastToolUseId, currentToolResultsMap)))
           && !filteredHistoricalTurns.some(turn => turn.attemptId === currentAttemptId && turn.type === 'assistant') && (
           <div className="flex items-center gap-2 text-muted-foreground text-sm py-1">
             <RunningDots />
@@ -198,6 +216,7 @@ export function ConversationView({
           return authError ? <AuthErrorMessage message={authError} className="mt-4" /> : null;
         })()}
       </div>
+      <ConversationViewUserMessageNavButtons showNav={showNav} onPrev={goToPrev} onNext={goToNext} />
     </ScrollArea>
   );
 }

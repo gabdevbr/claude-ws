@@ -25,6 +25,8 @@ interface ButlerStoreState {
   lastHeartbeat: number | null;
   notifications: ButlerNotificationItem[];
   unreadCount: number;
+  createTaskDialogOpen: boolean;
+  schedulerDialogOpen: boolean;
 }
 
 interface ButlerStoreActions {
@@ -32,6 +34,8 @@ interface ButlerStoreActions {
   addNotification: (notif: Omit<ButlerNotificationItem, 'read'>) => void;
   markAllRead: () => void;
   clearNotifications: () => void;
+  setCreateTaskDialogOpen: (open: boolean) => void;
+  setSchedulerDialogOpen: (open: boolean) => void;
 }
 
 const MAX_NOTIFICATIONS = 50;
@@ -44,6 +48,8 @@ export const useButlerStore = create<ButlerStoreState & ButlerStoreActions>((set
   lastHeartbeat: null,
   notifications: [],
   unreadCount: 0,
+  createTaskDialogOpen: false,
+  schedulerDialogOpen: false,
 
   updateStatus: (data) =>
     set((prev) => ({ ...prev, ...data })),
@@ -65,4 +71,8 @@ export const useButlerStore = create<ButlerStoreState & ButlerStoreActions>((set
 
   clearNotifications: () =>
     set({ notifications: [], unreadCount: 0 }),
+
+  setCreateTaskDialogOpen: (open) => set({ createTaskDialogOpen: open }),
+
+  setSchedulerDialogOpen: (open) => set({ schedulerDialogOpen: open }),
 }));

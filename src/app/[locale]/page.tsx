@@ -45,6 +45,14 @@ const SettingsPage = dynamic(
   () => import('@/components/settings/settings-page').then(m => ({ default: m.SettingsPage })),
   { ssr: false }
 );
+const CreateButlerTaskDialog = dynamic(
+  () => import('@/components/butler/create-butler-task-dialog').then(m => ({ default: m.CreateButlerTaskDialog })),
+  { ssr: false }
+);
+const ButlerSchedulerDialog = dynamic(
+  () => import('@/components/butler/butler-scheduler-dialog').then(m => ({ default: m.ButlerSchedulerDialog })),
+  { ssr: false }
+);
 const SetupDialog = dynamic(
   () => import('@/components/settings/setup-dialog').then(m => ({ default: m.SetupDialog })),
   { ssr: false }
@@ -128,6 +136,9 @@ function KanbanApp() {
     selectedTask,
     setSelectedTask,
     onCreateTask: () => setCreateTaskOpen(true),
+    onCreateButlerTask: () => {
+      if (butlerProjectId) useButlerStore.getState().setCreateTaskDialogOpen(true);
+    },
   });
 
   const handleTaskCreated = (task: Task, startNow: boolean, processedPrompt?: string, fileIds?: string[]) => {
@@ -196,6 +207,8 @@ function KanbanApp() {
         onOpenChange={setCreateTaskOpen}
         onTaskCreated={handleTaskCreated}
       />
+      <CreateButlerTaskDialog />
+      <ButlerSchedulerDialog />
       <SetupDialog open={setupOpen || autoShowSetup} onOpenChange={setSetupOpen} />
 
       {agentFactoryOpen && (

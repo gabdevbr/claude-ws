@@ -1,24 +1,27 @@
 'use client';
 
 // Registers global keyboard shortcuts for the Kanban app layout:
-// Cmd+N / Cmd+Space → new task, Cmd+B → toggle sidebar,
+// Cmd+N → new task, Cmd+Space → new butler task, Cmd+B → toggle sidebar,
 // Cmd+` → toggle terminal, Escape → close active panel in priority order.
 
 import { useEffect, useCallback } from 'react';
 import { useSidebarStore } from '@/stores/sidebar-store';
 import { useTerminalStore } from '@/stores/terminal-store';
+import { useFloatingWindowsStore } from '@/stores/floating-windows-store';
 import type { Task } from '@/types';
 
 interface UseKanbanKeyboardShortcutsOptions {
   selectedTask: Task | null;
   setSelectedTask: (task: Task | null) => void;
   onCreateTask: () => void;
+  onCreateButlerTask: () => void;
 }
 
 export function useKanbanKeyboardShortcuts({
   selectedTask,
   setSelectedTask,
   onCreateTask,
+  onCreateButlerTask,
 }: UseKanbanKeyboardShortcutsOptions) {
   const toggleSidebar = useSidebarStore((s) => s.toggleSidebar);
   const isOpen = useSidebarStore((s) => s.isOpen);
@@ -44,12 +47,20 @@ export function useKanbanKeyboardShortcuts({
       const mod = e.metaKey || e.ctrlKey;
 
       if (mod && e.key === 'n') { e.preventDefault(); onCreateTask(); return; }
-      if (mod && e.code === 'Space') { e.preventDefault(); onCreateTask(); return; }
+      if (mod && e.code === 'Space') { e.preventDefault(); onCreateButlerTask(); return; }
       if (mod && e.key === 'b') { e.preventDefault(); toggleSidebar(); return; }
       if (mod && e.key === '`') { e.preventDefault(); useTerminalStore.getState().togglePanel(); return; }
 
       if (e.key === 'Escape') {
-        // Priority: file tab > diff tab > task detail > sidebar
+        // Priority: floating window > file tab > diff tab > task detail > sidebar
+        const floatingStore = useFloatingWindowsStore.getState();
+        const floatingWindows = Array.from(floatingStore.windows.values());
+        if (floatingWindows.length > 0) {
+          // Close the topmost (highest z-index) floating window
+          const topWindow = floatingWindows.reduce((a, b) => a.zIndex > b.zIndex ? a : b);
+          floatingStore.closeWindow(topWindow.id);
+          return;
+        }
         if (activeTabId && openTabs.length > 0) {
           handleCloseTab(activeTabId, (fileName) => `Unsaved changes in "${fileName}". Discard?`);
           return;
@@ -67,7 +78,7 @@ export function useKanbanKeyboardShortcuts({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     selectedTask, toggleSidebar, activeTabId, openTabs, handleCloseTab,
-    activeDiffTabId, diffTabs, closeDiffTab, isOpen, setIsOpen, setSelectedTask, onCreateTask,
+    activeDiffTabId, diffTabs, closeDiffTab, isOpen, setIsOpen, setSelectedTask, onCreateTask, onCreateButlerTask,
   ]);
 
   return { handleCloseTab };

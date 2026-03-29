@@ -7,7 +7,10 @@
  * This centralizes all task event emission in one place, preventing
  * frontend desync from missing manual emits at call sites.
  */
-import { getSocketServer } from '@/lib/socket-io-server-singleton';
+import { getSocketServer } from '../socket-io-server-singleton';
+import { createLogger } from '../logger';
+
+const log = createLogger('TaskService:SocketEmit');
 
 export function createTaskServiceWithSocketEmit(baseService: any) {
   return {
@@ -27,24 +30,46 @@ export function createTaskServiceWithSocketEmit(baseService: any) {
 
     async create(...args: any[]) {
       const result = await baseService.create(...args);
-      getSocketServer()?.emit('task:created', result);
+      const io = getSocketServer();
+      if (io) {
+        io.emit('task:created', result);
+      } else {
+        log.warn({ taskId: result?.id }, 'Socket server not available for task:created emit');
+      }
       return result;
     },
 
     async update(...args: any[]) {
       const result = await baseService.update(...args);
-      getSocketServer()?.emit('task:updated', result);
+      const io = getSocketServer();
+      if (io) {
+        io.emit('task:updated', result);
+      } else {
+        log.warn({ taskId: result?.id }, 'Socket server not available for task:updated emit');
+      }
       return result;
     },
 
     async remove(id: string) {
       await baseService.remove(id);
-      getSocketServer()?.emit('task:deleted', { id });
+      const io = getSocketServer();
+      if (io) {
+        io.emit('task:deleted', { id });
+      } else {
+        log.warn({ taskId: id }, 'Socket server not available for task:deleted emit');
+      }
     },
 
     async reorder(...args: any[]) {
       const result = await baseService.reorder(...args);
-      if (result) getSocketServer()?.emit('task:updated', result);
+      if (result) {
+        const io = getSocketServer();
+        if (io) {
+          io.emit('task:updated', result);
+        } else {
+          log.warn({ taskId: result?.id }, 'Socket server not available for task:updated emit');
+        }
+      }
       return result;
     },
   };

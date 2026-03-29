@@ -807,7 +807,22 @@
     "minutesAgo": "{m} phút trước",
     "hoursAgo": "{h} giờ trước",
     "daysAgo": "{d} ngày trước",
-    "startTask": "Butler Task"
+    "startTask": "Butler Task",
+    "schedulerMenu": "Quản trị Scheduler",
+    "schedulerTitle": "Butler Schedulers",
+    "schedulerLoading": "Đang tải schedulers...",
+    "schedulerEmpty": "Chưa có scheduler nào",
+    "schedulerActive": "Đang chạy",
+    "schedulerStopped": "Đã dừng",
+    "schedulerStale": "Hết hạn",
+    "schedulerEnable": "Kích hoạt",
+    "schedulerDisable": "Tắt",
+    "schedulerEdit": "Sửa",
+    "schedulerDelete": "Xoá",
+    "schedulerConfirmDelete": "Xác nhận xoá",
+    "schedulerLastRun": "Chạy lần cuối",
+    "schedulerNextRun": "Chạy lần tới",
+    "schedulerCopyCommand": "Copy lệnh"
   },
   "globalError": {
     "title": "Đã xảy ra lỗi!",

@@ -28,7 +28,7 @@ export function ConversationHistoricalUserTurn({ turn }: ConversationHistoricalU
   }
 
   return (
-    <div className="flex flex-col items-end w-full max-w-full gap-1 pl-10">
+    <div data-user-turn className="flex flex-col items-end w-full max-w-full gap-1 pl-10">
       <div className="bg-primary/10 rounded-lg px-4 py-3 text-[15px] leading-relaxed break-words space-y-3 max-w-[85%] overflow-hidden">
         <div className="whitespace-pre-wrap">{turn.prompt}</div>
         {turn.files && turn.files.length > 0 && (

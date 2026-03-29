@@ -72,6 +72,13 @@ export function FloatingChatWindow({ task, zIndex, onClose, onMaximize, onFocus 
     }
   }, [task.id, task.pendingFileIds, task.chatInit, restoreFromDb]);
 
+  // Auto-focus the prompt input when the floating window mounts
+  useEffect(() => {
+    // Small delay to ensure the PromptInput is fully rendered
+    const timer = setTimeout(() => promptInputRef.current?.focus(), 100);
+    return () => clearTimeout(timer);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const currentProjectId = activeProjectId || selectedProjectIds[0] || task.projectId;
   const currentProjectPath = currentProjectId ? projects.find(p => p.id === currentProjectId)?.path : undefined;
   const hasShells = currentProjectId ? Array.from(shells.values()).some(s => s.projectId === currentProjectId) : false;
@@ -113,7 +120,7 @@ export function FloatingChatWindow({ task, zIndex, onClose, onMaximize, onFocus 
               taskLastModel={task.lastModel}
               taskLastProvider={task.lastProvider}
               projectPath={currentProjectPath}
-              initialValue={!hasSentFirstMessage && !task.chatInit && task.description ? task.description : undefined}
+              initialValue={!hasSentFirstMessage && !task.chatInit && !pendingAutoStartTask && task.description ? task.description : undefined}
             />
             <InteractiveCommandOverlay />
           </div>
@@ -183,7 +190,7 @@ export function FloatingChatWindow({ task, zIndex, onClose, onMaximize, onFocus 
         </div>
       }
     >
-      <div className="flex-1 overflow-hidden min-w-0 relative z-0">
+      <div className="h-full overflow-hidden min-w-0 relative z-0">
         <ConversationView
           taskId={task.id}
           currentMessages={messages}
