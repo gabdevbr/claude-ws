@@ -5,6 +5,7 @@ import { AttemptItem } from './attempt-item';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2 } from 'lucide-react';
 import type { Attempt } from '@/types';
+import * as taskApiService from '@/lib/services/task-api-service';
 
 interface AttemptListProps {
   taskId: string;
@@ -20,11 +21,8 @@ export function AttemptList({ taskId, selectedAttemptId, onSelectAttempt }: Atte
     const fetchAttempts = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(`/api/tasks/${taskId}/attempts`);
-        if (response.ok) {
-          const data = await response.json();
-          setAttempts(data.attempts || []);
-        }
+        const data = await taskApiService.getTaskAttempts(taskId);
+        setAttempts((data as any)?.attempts || data || []);
       } catch (error) {
         console.error('Failed to fetch attempts:', error);
       } finally {

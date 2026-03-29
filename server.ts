@@ -47,6 +47,7 @@ const log = createLogger('Server');
 import { eq } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import type { AttemptStatus } from './src/types';
+import { setSocketServer } from './src/lib/socket-io-server-singleton';
 import { processAttachments } from './src/lib/file-processor';
 import { usageTracker } from './src/lib/usage-tracker';
 import { workflowTracker } from './src/lib/workflow-tracker';
@@ -56,6 +57,9 @@ import { getMinioPullQueueWorker } from './src/lib/minio-pull-queue';
 import { getMinioPushQueueWorker } from './src/lib/minio-push-queue';
 import { createAutopilotManager, appendQuestionAnswer, appendSubagentEnded, appendTrackedTaskUpdate } from './src/lib/autopilot';
 import type { AutopilotMode } from './src/lib/autopilot';
+import { createButlerManager, type ButlerManager } from './src/lib/butler';
+import { createTaskService } from '@agentic-sdk/services/task/task-crud-and-reorder';
+import { createTaskServiceWithSocketEmit } from './src/lib/services/task-service-with-socket-emit';
 
 import { getPort, getHostname } from './src/lib/server-port-configuration';
 
@@ -141,6 +145,9 @@ app.prepare().then(async () => {
 
   log.info(`[Server] Restored ${shellManager.runningCount} running shells`);
 
+  // Initialize task service with auto-emit for Socket.IO events
+  const taskService = createTaskServiceWithSocketEmit(createTaskService(db));
+
   // Initialize Autopilot Manager
   const autopilotManager = createAutopilotManager();
   autopilotManager.registerQuestionListener(agentManager);
@@ -161,8 +168,24 @@ app.prepare().then(async () => {
     },
   });
 
+  // Expose io singleton for Next.js API routes to emit events
+  setSocketServer(io);
+
   // Restore autopilot state from DB (needs io for worker callbacks)
-  await autopilotManager.restoreFromDb({ db, io, schema, agentManager, sessionManager });
+  await autopilotManager.restoreFromDb({ db, io, schema, agentManager, sessionManager, taskService });
+
+  // Initialize Butler Agent (workspace-wide orchestrator)
+  // NOTE: Do not await — Butler spawns SDK sessions that hit our proxy endpoint,
+  // which requires httpServer.listen() to complete first. Fire and forget to avoid deadlock.
+  const butlerManager = createButlerManager();
+
+  // Export butlerManager singleton for API routes to access
+  const globalKey = '__claude_butler_manager__' as const;
+  (globalThis as any)[globalKey] = butlerManager;
+
+  butlerManager.initialize({ db, io, schema, agentManager, sessionManager }).catch(err => {
+    log.error({ err }, '[Butler] Background initialization failed');
+  });
 
   // Disconnect cleanup timers - keyed by attemptId
   const disconnectTimers = new Map<string, NodeJS.Timeout>();
@@ -408,25 +431,33 @@ app.prepare().then(async () => {
 
           // Update task status to in_progress if it was todo
           // Also clear pendingFileIds since they've been processed
-          const taskUpdates: any = { updatedAt: Date.now() };
-          if (task.status === 'todo') taskUpdates.status = 'in_progress';
-          if (task.pendingFileIds) taskUpdates.pendingFileIds = null;
-          if (Object.keys(taskUpdates).length > 1) {
-            await db
-              .update(schema.tasks)
-              .set(taskUpdates)
-              .where(eq(schema.tasks.id, taskId));
+          if (task.status === 'todo' || task.pendingFileIds) {
+            const taskUpdates: any = {};
+            if (task.status === 'todo') taskUpdates.status = 'in_progress';
+            if (task.pendingFileIds) taskUpdates.pendingFileIds = null;
+            await taskService.update(taskId, taskUpdates);
           }
 
           // Join attempt room
           socket.join(`attempt:${attemptId}`);
+
+          // Inject Butler persona into prompt when task belongs to Butler's project
+          let effectivePrompt = prompt;
+          const butlerProjectId = butlerManager.getProjectId();
+          if (butlerProjectId && task.projectId === butlerProjectId) {
+            const personaPrefix = butlerManager.buildPersonaPrompt();
+            if (personaPrefix) {
+              effectivePrompt = `${personaPrefix}\n\n---\n\n${prompt}`;
+              log.info({ taskId }, '[Butler] Persona context injected into task prompt');
+            }
+          }
 
           // Start Claude Agent SDK query
 
           agentManager.start({
             attemptId,
             projectPath: project.path,
-            prompt,
+            prompt: effectivePrompt,
             model: model || undefined,
             provider: provider || undefined,
             sessionOptions: Object.keys(sessionOptions).length > 0 ? sessionOptions : undefined,
@@ -448,6 +479,11 @@ app.prepare().then(async () => {
 
           // Global event for all clients to track running tasks
           io.emit('task:started', { taskId });
+
+          // Forward to butler event collector
+          if (butlerManager.isEnabled()) {
+            butlerManager.pushEvent({ type: 'task:started', payload: { taskId }, timestamp: Date.now() });
+          }
         } catch (error) {
           log.error({ error }, 'Error starting attempt');
           socket.emit('error', {
@@ -896,7 +932,7 @@ app.prepare().then(async () => {
       if (!['off', 'autonomous', 'ask'].includes(mode)) return;
       log.info({ projectId, mode }, '[Autopilot] Setting mode');
       await autopilotManager.setMode(projectId, mode as AutopilotMode, {
-        db, io, schema, agentManager, sessionManager,
+        db, io, schema, agentManager, sessionManager, taskService,
       });
     });
 
@@ -904,7 +940,7 @@ app.prepare().then(async () => {
     socket.on('autopilot:enable', async (data: { projectId: string }) => {
       log.info({ projectId: data.projectId }, '[Autopilot] Enable (compat → autonomous)');
       await autopilotManager.setMode(data.projectId, 'autonomous', {
-        db, io, schema, agentManager, sessionManager,
+        db, io, schema, agentManager, sessionManager, taskService,
       });
     });
 
@@ -912,7 +948,7 @@ app.prepare().then(async () => {
     socket.on('autopilot:disable', async (data: { projectId: string }) => {
       log.info({ projectId: data.projectId }, '[Autopilot] Disable (compat → off)');
       await autopilotManager.setMode(data.projectId, 'off', {
-        db, io, schema, agentManager, sessionManager,
+        db, io, schema, agentManager, sessionManager, taskService,
       });
     });
 
@@ -922,6 +958,99 @@ app.prepare().then(async () => {
         projectId,
         ...autopilotManager.getStatus(projectId),
       });
+    });
+
+    // Butler handlers
+    socket.on('butler:status-request', () => {
+      socket.emit('butler:status', butlerManager.getStatus());
+      // Replay buffered notifications to late-connecting clients
+      const notifService = butlerManager.getNotificationService();
+      if (notifService) {
+        const buffered = notifService.getRecentNotifications();
+        for (const n of buffered) {
+          socket.emit('butler:notification', n);
+        }
+      }
+    });
+
+    socket.on('butler:clear-notifications', () => {
+      const notifService = butlerManager.getNotificationService();
+      if (notifService) notifService.clearBuffer();
+    });
+
+    socket.on('butler:enable', async () => {
+      log.info('[Butler] Enable requested');
+      await butlerManager.start();
+    });
+
+    socket.on('butler:disable', async () => {
+      log.info('[Butler] Disable requested by user');
+      await butlerManager.stop(true);
+    });
+
+    // Butler scheduler handlers
+    socket.on('butler:schedule-create', async (data: { cronExpression: string; actionType: string; actionPayload: any }) => {
+      try {
+        const scheduler = butlerManager.getSchedulerService();
+        if (!scheduler) {
+          socket.emit('butler:error', { message: 'Scheduler not available' });
+          return;
+        }
+        const task = await scheduler.createTask(data.cronExpression, data.actionType as any, data.actionPayload);
+        socket.emit('butler:schedule-created', task);
+      } catch (err) {
+        log.error({ err }, '[Butler] Failed to create scheduled task');
+        socket.emit('butler:error', { message: 'Failed to create scheduled task' });
+      }
+    });
+
+    socket.on('butler:schedule-list', async () => {
+      try {
+        const scheduler = butlerManager.getSchedulerService();
+        if (!scheduler) {
+          socket.emit('butler:schedule-list', []);
+          return;
+        }
+        const tasks = scheduler.listTasks();
+        socket.emit('butler:schedule-list', tasks);
+      } catch (err) {
+        log.error({ err }, '[Butler] Failed to list scheduled tasks');
+        socket.emit('butler:error', { message: 'Failed to list scheduled tasks' });
+      }
+    });
+
+    socket.on('butler:schedule-delete', async (data: { id: string }) => {
+      try {
+        const scheduler = butlerManager.getSchedulerService();
+        if (!scheduler) {
+          socket.emit('butler:error', { message: 'Scheduler not available' });
+          return;
+        }
+        const deleted = await scheduler.deleteTask(data.id);
+        socket.emit('butler:schedule-deleted', { id: data.id, success: deleted });
+      } catch (err) {
+        log.error({ err }, '[Butler] Failed to delete scheduled task');
+        socket.emit('butler:error', { message: 'Failed to delete scheduled task' });
+      }
+    });
+
+    socket.on('butler:schedule-update', async (data: { id: string; updates: any }) => {
+      try {
+        const scheduler = butlerManager.getSchedulerService();
+        if (!scheduler) {
+          socket.emit('butler:error', { message: 'Scheduler not available' });
+          return;
+        }
+        const task = await scheduler.updateTask(data.id, data.updates);
+        if (!task) {
+          socket.emit('butler:error', { message: 'Task not found' });
+          return;
+        }
+        socket.emit('butler:schedule-updated', task);
+      } catch (err) {
+        log.error({ err }, '[Butler] Failed to update scheduled task');
+        socket.emit('butler:error', { message: 'Failed to update scheduled task' });
+      }
     });
 
     socket.on('disconnect', () => {
@@ -1574,6 +1703,25 @@ app.prepare().then(async () => {
       // Global event for all clients to track completed tasks
       if (attempt?.taskId) {
         io.emit('task:finished', { taskId: attempt.taskId, status });
+
+        // Forward to butler event collector (include projectId for per-project rule matching)
+        if (butlerManager.isEnabled()) {
+          const taskRow = await db.query.tasks.findFirst({ where: eq(schema.tasks.id, attempt.taskId) });
+          const projectRow = taskRow?.projectId
+            ? await db.query.projects.findFirst({ where: eq(schema.projects.id, taskRow.projectId) })
+            : undefined;
+          butlerManager.pushEvent({
+            type: 'task:finished',
+            payload: {
+              taskId: attempt.taskId,
+              status,
+              projectId: taskRow?.projectId,
+              taskTitle: taskRow?.title,
+              projectName: projectRow?.name,
+            },
+            timestamp: Date.now(),
+          });
+        }
       }
 
       const shouldCompact = !!(status === 'completed' && usageStats?.contextHealth?.shouldCompact);
@@ -1940,6 +2088,10 @@ app.prepare().then(async () => {
 
     minioPushQueueWorker.stop();
     log.info('> MinIO push queue worker stopped');
+
+    // Stop butler agent
+    await butlerManager.stop();
+    log.info('> Butler agent stopped');
 
     // Cancel all Claude agents first
     agentManager.cancelAll();

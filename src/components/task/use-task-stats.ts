@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import * as taskApiService from '@/lib/services/task-api-service';
 
 export interface TaskStats {
   totalTokens: number;
@@ -20,21 +21,24 @@ export function useTaskStats(taskId?: string) {
   useEffect(() => {
     if (!taskId) return;
 
+    const controller = new AbortController();
+
     const fetchStats = async () => {
       try {
-        const res = await fetch(`/api/tasks/${taskId}/stats`);
-        if (res.ok) {
-          const data = await res.json();
-          setTaskStats(data);
-        }
+        const data = await taskApiService.getTaskStats(taskId, { signal: controller.signal });
+        setTaskStats(data);
       } catch (error) {
-        console.error('Failed to fetch task stats:', error);
+        // Ignore abort errors (component unmount) and network errors (server restart)
+        if (error instanceof DOMException && error.name === 'AbortError') return;
       }
     };
 
     fetchStats();
     const interval = setInterval(fetchStats, 5000);
-    return () => clearInterval(interval);
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
   }, [taskId]);
 
   return taskStats;

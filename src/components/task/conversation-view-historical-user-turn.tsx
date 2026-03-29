@@ -20,12 +20,15 @@ export function ConversationHistoricalUserTurn({ turn }: ConversationHistoricalU
   const isCancelled = turn.attemptStatus === 'cancelled';
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
 
+  // Hide system-initiated turns (e.g. auto-resume after restart)
+  if (!turn.prompt && (!turn.files || turn.files.length === 0)) return null;
+
   if (isCancelled) {
     console.log('[ConversationView] Rendering cancelled user turn:', turn.attemptId, turn.attemptStatus);
   }
 
   return (
-    <div className="flex flex-col items-end w-full max-w-full gap-1">
+    <div className="flex flex-col items-end w-full max-w-full gap-1 pl-10">
       <div className="bg-primary/10 rounded-lg px-4 py-3 text-[15px] leading-relaxed break-words space-y-3 max-w-[85%] overflow-hidden">
         <div className="whitespace-pre-wrap">{turn.prompt}</div>
         {turn.files && turn.files.length > 0 && (

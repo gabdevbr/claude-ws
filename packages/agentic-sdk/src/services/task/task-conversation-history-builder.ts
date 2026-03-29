@@ -36,7 +36,7 @@ export async function buildConversationHistory(db: any, taskId: string): Promise
 
     turns.push({
       type: 'user',
-      prompt: attempt.displayPrompt || attempt.prompt,
+      prompt: attempt.displayPrompt ?? attempt.prompt,
       messages: [],
       attemptId: attempt.id,
       timestamp: attempt.createdAt,

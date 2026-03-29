@@ -11,6 +11,7 @@ import { toast } from '@/hooks/use-toast';
 import type { ActiveQuestion } from '@/hooks/use-attempt-questions';
 import { registerOutputHandler } from '@/hooks/use-attempt-socket-output-handler';
 import type { SubagentNode, AgentMessage, TrackedTask } from '@/lib/workflow-tracker';
+import * as taskApiService from '@/lib/services/task-api-service';
 
 const log = createLogger('AttemptSocketHook');
 
@@ -25,6 +26,7 @@ interface UseAttemptSocketOptions {
   setCurrentAttemptId: (id: string | null | ((prev: string | null) => string | null)) => void;
   setIsRunning: (running: boolean) => void;
   setActiveQuestion: (q: ActiveQuestion | null) => void;
+  setSendError: (error: string | null) => void;
 }
 
 export function useAttemptSocket({
@@ -38,8 +40,11 @@ export function useAttemptSocket({
   setCurrentAttemptId,
   setIsRunning,
   setActiveQuestion,
+  setSendError,
 }: UseAttemptSocketOptions) {
   const { addRunningTask, removeRunningTask, markTaskCompleted } = useRunningTasksStore();
+  const setSendErrorRef = useRef(setSendError);
+  useEffect(() => { setSendErrorRef.current = setSendError; }, [setSendError]);
 
   // Keep taskId in a ref so socket event handlers always see the current value
   // (the socket useEffect has [] deps, so closure values would be stale)
@@ -48,6 +53,8 @@ export function useAttemptSocket({
 
   // Initialize socket connection and register all event listeners
   useEffect(() => {
+    let hasConnectedBefore = false;
+
     const socketInstance = io({
       reconnection: true,
       reconnectionDelay: 1000,
@@ -57,6 +64,10 @@ export function useAttemptSocket({
 
     socketInstance.on('connect', () => {
       setIsConnected(true);
+
+      const isReconnect = hasConnectedBefore;
+      hasConnectedBefore = true;
+
       setCurrentAttemptId((currentId) => {
         if (currentId) {
           socketInstance.emit('attempt:subscribe', { attemptId: currentId });
@@ -70,6 +81,31 @@ export function useAttemptSocket({
             })
             .catch(() => {});
         }
+
+        // On reconnect, refetch running attempt messages to fill gaps from disconnection
+        if (isReconnect && taskIdRef.current) {
+          log.debug({ taskId: taskIdRef.current }, 'Socket reconnected, refetching running attempt state');
+          taskApiService.getRunningAttempt(taskIdRef.current, { cache: 'no-store' })
+            .then(data => {
+              if (!data?.attempt) return;
+              if (data.attempt.status === 'running') {
+                // Replace messages with server-side state to fill missed gaps
+                const loadedMessages = (data.messages || data.attempt.messages || []).map((m: any) => ({
+                  ...m,
+                  _attemptId: data.attempt!.id,
+                  _msgId: Math.random().toString(36),
+                }));
+                setMessages(() => loadedMessages);
+                log.debug({ messageCount: loadedMessages.length }, 'Recovered messages after reconnect');
+              } else {
+                // Attempt finished while disconnected
+                log.debug({ attemptId: data.attempt.id, status: data.attempt.status }, 'Attempt finished during disconnection');
+                setIsRunning(false);
+              }
+            })
+            .catch(() => {});
+        }
+
         return currentId;
       });
     });
@@ -112,9 +148,10 @@ export function useAttemptSocket({
       });
     });
 
-    socketInstance.on('error', () => {
+    socketInstance.on('error', (data: { message?: string } | undefined) => {
       setIsRunning(false);
       if (currentTaskIdRef.current) removeRunningTask(currentTaskIdRef.current);
+      setSendErrorRef.current(data?.message || 'Connection error');
     });
 
     socketInstance.on('question:ask', (data: any) => {

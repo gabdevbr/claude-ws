@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import type { TaskStatus } from '@/types';
 import { createTaskService } from '@agentic-sdk/services/task/task-crud-and-reorder';
+import { createTaskServiceWithSocketEmit } from '@/lib/services/task-service-with-socket-emit';
 
-const taskService = createTaskService(db);
+const taskService = createTaskServiceWithSocketEmit(createTaskService(db));
 
 // GET /api/tasks - List tasks
 // Query params:

@@ -619,6 +619,7 @@
     "cancelled": "Đã hủy",
     "detachToFloating": "Tách thành cửa sổ nổi",
     "maximizeToPanel": "Phóng to thành bảng",
+    "sendError": "Gửi thất bại",
     "clearConversation": "Xóa cuộc trò chuyện",
     "clearConversationConfirm": "Bạn có chắc muốn xóa tất cả tin nhắn? Hành động này không thể hoàn tác.",
     "compactConversation": "Nén cuộc trò chuyện",
@@ -788,6 +789,25 @@
     "title": "404 - Không tìm thấy trang",
     "description": "Trang bạn đang tìm không tồn tại.",
     "goHome": "Quay về trang chủ"
+  },
+  "butler": {
+    "disabled": "Butler đã tắt",
+    "status_idle": "Butler đang rảnh",
+    "status_initializing": "Butler đang khởi động...",
+    "status_running": "Butler đang hoạt động",
+    "status_reasoning": "Butler đang suy nghĩ...",
+    "status_shutting_down": "Butler đang dừng...",
+    "enable": "Bật Butler",
+    "disable": "Tắt Butler",
+    "openProject": "Mở dự án Butler",
+    "notifications": "Thông báo",
+    "noNotifications": "Không có thông báo",
+    "clearAll": "Xóa tất cả",
+    "justNow": "vừa xong",
+    "minutesAgo": "{m} phút trước",
+    "hoursAgo": "{h} giờ trước",
+    "daysAgo": "{d} ngày trước",
+    "startTask": "Butler Task"
   },
   "globalError": {
     "title": "Đã xảy ra lỗi!",

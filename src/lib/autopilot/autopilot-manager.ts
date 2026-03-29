@@ -14,6 +14,8 @@ import {
 } from './autopilot-prompt-builder';
 import type { AutopilotMode } from './autopilot-prompt-builder';
 import { isValidModelId } from '../models';
+import { createTaskService } from '@agentic-sdk/services/task/task-crud-and-reorder';
+import { createTaskServiceWithSocketEmit } from '../services/task-service-with-socket-emit';
 
 export type { AutopilotMode };
 
@@ -59,6 +61,7 @@ interface AutopilotDeps {
   schema: any;
   agentManager: any;
   sessionManager: any;
+  taskService?: any;
 }
 
 interface AutopilotStatus {
@@ -97,6 +100,7 @@ export class AutopilotManager {
   // Compact attempts started internally before moving task to in_review.
   // server.ts exit handler should skip autopilot/task:finished processing for these.
   private internalCompactAttempts = new Set<string>();
+  private taskService: any;
 
   /** Check if an attempt is an internal pre-review compact (server.ts should skip autopilot processing) */
   isInternalCompact(attemptId: string): boolean {
@@ -135,6 +139,11 @@ export class AutopilotManager {
   }
 
   async enable(projectId: string, mode: AutopilotMode, deps: AutopilotDeps): Promise<void> {
+    // Initialize task service if not already done
+    if (!this.taskService) {
+      this.taskService = deps.taskService || createTaskServiceWithSocketEmit(createTaskService(deps.db));
+    }
+
     this.activeProjects.set(projectId, mode);
     this.processedCounts.set(projectId, 0);
     this.skippedTaskIds.set(projectId, []);
@@ -357,10 +366,15 @@ export class AutopilotManager {
     if (project?.path) {
       appendCompletedEntry(project.path, task.id);
     }
-    await db
-      .update(schema.tasks)
-      .set({ status: 'in_review', updatedAt: Date.now() })
-      .where(eq(schema.tasks.id, task.id));
+
+    if (this.taskService) {
+      await this.taskService.update(task.id, { status: 'in_review' });
+    } else {
+      await db
+        .update(schema.tasks)
+        .set({ status: 'in_review', updatedAt: Date.now() })
+        .where(eq(schema.tasks.id, task.id));
+    }
 
     if (ctx) {
       ctx.completedTitles.push(task.title);
@@ -375,7 +389,6 @@ export class AutopilotManager {
 
     log.info({ taskId: task.id, projectId }, 'Autopilot: task → in_review, picking next');
 
-    await this.emitTaskUpdated(task.id, deps);
     this.emitStatus(projectId, deps);
 
     setTimeout(() => {
@@ -417,10 +430,14 @@ export class AutopilotManager {
       appendSkippedEntry(project.path, task.id, MAX_RETRIES);
     }
 
-    await db
-      .update(schema.tasks)
-      .set({ status: 'todo', updatedAt: Date.now() })
-      .where(eq(schema.tasks.id, task.id));
+    if (this.taskService) {
+      await this.taskService.update(task.id, { status: 'todo' });
+    } else {
+      await db
+        .update(schema.tasks)
+        .set({ status: 'todo', updatedAt: Date.now() })
+        .where(eq(schema.tasks.id, task.id));
+    }
 
     this.currentTaskId.delete(projectId);
     this.retryCounts.delete(task.id);
@@ -429,7 +446,6 @@ export class AutopilotManager {
     skipped.push(task.id);
     this.skippedTaskIds.set(projectId, skipped);
 
-    await this.emitTaskUpdated(task.id, deps);
     this.emitStatus(projectId, deps);
 
     setTimeout(() => {
@@ -586,12 +602,14 @@ export class AutopilotManager {
       outputSchema: null,
     });
 
-    await db
-      .update(schema.tasks)
-      .set({ status: 'in_progress', updatedAt: Date.now() })
-      .where(eq(schema.tasks.id, task.id));
-
-    await this.emitTaskUpdated(task.id, deps);
+    if (this.taskService) {
+      await this.taskService.update(task.id, { status: 'in_progress' });
+    } else {
+      await db
+        .update(schema.tasks)
+        .set({ status: 'in_progress', updatedAt: Date.now() })
+        .where(eq(schema.tasks.id, task.id));
+    }
 
     this.currentTaskId.set(projectId, task.id);
     this.phase.set(projectId, 'processing');
@@ -746,9 +764,15 @@ export class AutopilotManager {
             }
 
             for (let i = 0; i < orderedIds.length; i++) {
-              await db.update(schema.tasks)
-                .set({ position: i, updatedAt: Date.now() })
-                .where(eq(schema.tasks.id, orderedIds[i]));
+              const taskId = orderedIds[i];
+              const task = todoTasks.find((t: any) => t.id === taskId);
+              if (this.taskService && task) {
+                await this.taskService.reorder(taskId, i, task.status);
+              } else {
+                await db.update(schema.tasks)
+                  .set({ position: i, updatedAt: Date.now() })
+                  .where(eq(schema.tasks.id, taskId));
+              }
             }
 
             const reorderedTitles = orderedIds.map((id: string) => {
@@ -757,10 +781,6 @@ export class AutopilotManager {
             });
             const ctx = this.taskContexts.get(projectId);
             if (ctx) ctx.allTodoTitles = reorderedTitles;
-
-            for (const id of orderedIds) {
-              await this.emitTaskUpdated(id, deps);
-            }
 
             log.info({ projectId, order: orderedIds }, 'Autopilot: tasks reordered by AI planning');
           } else {
@@ -826,13 +846,6 @@ export class AutopilotManager {
       projectId,
       ...this.getStatus(projectId),
     });
-  }
-
-  private async emitTaskUpdated(taskId: string, deps: AutopilotDeps): Promise<void> {
-    const task = await deps.db.query.tasks.findFirst({
-      where: eq(deps.schema.tasks.id, taskId),
-    });
-    if (task) deps.io.emit('task:updated', task);
   }
 }
 

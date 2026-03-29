@@ -8,6 +8,7 @@ import { useProjectStore } from '@/stores/project-store';
 import { useTaskStore } from '@/stores/task-store';
 import { useFloatingWindowsStore } from '@/stores/floating-windows-store';
 import type { Task } from '@/types';
+import * as taskApiService from '@/lib/services/task-api-service';
 
 /**
  * Keeps ?project= and ?task= URL params in sync with store state,
@@ -47,14 +48,7 @@ export function useKanbanUrlSyncAndDeepLinks() {
 
     const process = async () => {
       try {
-        const response = await fetch(`/api/tasks/${taskId}`);
-        if (!response.ok) {
-          console.warn(`Task deep link: task ${taskId} not found (${response.status})`);
-          removeTaskParam();
-          return;
-        }
-
-        const task: Task = await response.json();
+        const task: Task = await taskApiService.getTask(taskId);
         const projectExists = projects.some(p => p.id === task.projectId);
         if (!projectExists) {
           console.warn(`Task deep link: project ${task.projectId} not found`);

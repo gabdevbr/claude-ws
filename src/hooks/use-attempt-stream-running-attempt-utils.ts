@@ -15,6 +15,7 @@ import type { Socket } from 'socket.io-client';
 import type { ClaudeOutput } from '@/types';
 import { useRunningTasksStore } from '@/stores/running-tasks-store';
 import type { ActiveQuestion } from '@/hooks/use-attempt-questions';
+import * as taskApiService from '@/lib/services/task-api-service';
 
 // ---------------------------------------------------------------------------
 // useCheckRunningAttempt
@@ -60,17 +61,11 @@ export function useCheckRunningAttempt({
     const checkRunningAttempt = async () => {
       try {
         console.log('[checkRunningAttempt] Checking for running attempt, taskId:', taskId);
-        const res = await fetch(`/api/tasks/${taskId}/running-attempt`, {
+        const data = await taskApiService.getRunningAttempt(taskId, {
           cache: 'no-store',
           signal: abortController.signal,
         });
 
-        if (!res.ok) {
-          console.log('[checkRunningAttempt] No running attempt (HTTP', res.status, ')');
-          return;
-        }
-
-        const data = await res.json();
         if (abortController.signal.aborted) return;
 
         console.log('[checkRunningAttempt] Response:', {
@@ -78,16 +73,17 @@ export function useCheckRunningAttempt({
           status: data.attempt?.status,
           messageCount: data.messages?.length,
         });
+        if (abortController.signal.aborted) return;
 
         if (data.attempt && data.attempt.status === 'running') {
           currentTaskIdRef.current = taskId;
           currentAttemptIdRef.current = data.attempt.id;
           setCurrentAttemptId(data.attempt.id);
-          setCurrentPrompt(data.attempt.prompt);
+          setCurrentPrompt(data.attempt.prompt || '');
 
-          const loadedMessages = (data.messages || []).map((m: any) => ({
+          const loadedMessages = (data.messages || data.attempt.messages || []).map((m: any) => ({
             ...m,
-            _attemptId: data.attempt.id,
+            _attemptId: data.attempt!.id,
             _msgId: Math.random().toString(36),
           }));
           setMessages(loadedMessages);

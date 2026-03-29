@@ -61,11 +61,12 @@ export function TaskDetailPanel({ className }: TaskDetailPanelProps) {
     onWidthChange: (w) => setPanelWidth('taskDetail', w),
   });
 
-  const { messages, cancelAttempt, isRunning, currentAttemptId, currentPrompt, activeQuestion, answerQuestion, cancelQuestion, refetchQuestion, hasSentFirstMessage, currentAttemptFiles, handlePromptSubmit, handleInterruptAndSend, resetForNewTask } = useTaskAttemptStreamHandler(
+  const { messages, cancelAttempt, isRunning, currentAttemptId, currentPrompt, activeQuestion, answerQuestion, cancelQuestion, refetchQuestion, hasSentFirstMessage, currentAttemptFiles, handlePromptSubmit, handleInterruptAndSend, resetForNewTask, sendError } = useTaskAttemptStreamHandler(
     selectedTask?.id,
     {
       taskStatus: selectedTask?.status ?? 'todo',
       taskChatInit: selectedTask?.chatInit ?? false,
+      taskTitle: selectedTask?.title,
       taskLastModel: selectedTask?.lastModel,
       taskLastProvider: selectedTask?.lastProvider,
       taskDescription: selectedTask?.description,
@@ -178,6 +179,7 @@ export function TaskDetailPanel({ className }: TaskDetailPanelProps) {
           key={conversationKey} taskId={selectedTask.id} currentMessages={messages}
           currentAttemptId={currentAttemptId} currentPrompt={currentPrompt || undefined}
           currentFiles={isRunning ? currentAttemptFiles : undefined} isRunning={isRunning}
+          sendError={sendError}
           activeQuestion={activeQuestion}
           onOpenQuestion={(isRunning || activeQuestion) ? () => { if (!activeQuestion) refetchQuestion(); } : undefined}
         />

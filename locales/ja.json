@@ -617,6 +617,7 @@
     "cancelled": "キャンセルされました",
     "detachToFloating": "フローティングウィンドウにデタッチ",
     "maximizeToPanel": "パネルに最大化",
+    "sendError": "送信に失敗しました",
     "clearConversation": "会話をクリア",
     "clearConversationConfirm": "すべてのメッセージをクリアしてもよろしいですか？この操作は元に戻せません。",
     "compactConversation": "会話をコンパクト化",
@@ -786,6 +787,18 @@
     "title": "404 - ページが見つかりません",
     "description": "お探しのページは存在しません。",
     "goHome": "ホームに戻る"
+  },
+  "butler": {
+    "disabled": "バトラー無効",
+    "status_idle": "バトラー待機中",
+    "status_initializing": "バトラー起動中...",
+    "status_running": "バトラー稼働中",
+    "status_reasoning": "バトラー思考中...",
+    "status_shutting_down": "バトラー停止中...",
+    "enable": "バトラーを有効にする",
+    "disable": "バトラーを無効にする",
+    "openProject": "バトラープロジェクトを開く",
+    "startTask": "Butler Task"
   },
   "globalError": {
     "title": "問題が発生しました！",

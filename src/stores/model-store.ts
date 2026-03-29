@@ -3,6 +3,8 @@
 import { create } from 'zustand';
 import { Model, DEFAULT_MODEL_ID, getModelShortName } from '@/lib/models';
 import { createLogger } from '@/lib/logger';
+import * as taskApiService from '@/lib/services/task-api-service';
+import { TaskApiError } from '@/lib/services/task-api-service';
 
 const log = createLogger('ModelStore');
 
@@ -103,34 +105,21 @@ export const useModelStore = create<ModelStore>((set, get) => ({
 
       // Save to task's lastModel + lastProvider
       try {
-        const response = await fetch(`/api/tasks/${taskId}`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': localStorage.getItem('apiKey') || '',
-          },
-          body: JSON.stringify({ lastModel: modelId, lastProvider: provider }),
-        });
-
-        if (!response.ok) {
-          // 404 is expected for temp tasks (task not yet created)
-          // Keep local state but don't throw - task will get model on creation
-          if (response.status === 404) {
-            log.debug({ taskId }, 'Task not found (temp task), keeping local state only');
-            return;
-          }
-          // Rollback on other errors
-          const newTaskModels = { ...taskModels };
-          const newTaskProviders = { ...taskProviders };
-          delete newTaskModels[taskId];
-          delete newTaskProviders[taskId];
-          set({ taskModels: newTaskModels, taskProviders: newTaskProviders });
-          const errorText = await response.text();
-          log.error({ status: response.status, errorText }, 'Failed to save task model');
-          throw new Error(`Failed to save task model: ${response.status}`);
-        }
+        await taskApiService.updateTask(taskId, { lastModel: modelId, lastProvider: provider });
       } catch (error) {
-        log.error({ error, taskId }, 'Error setting model');
+        // 404 is expected for temp tasks (task not yet created)
+        // Keep local state but don't throw - task will get model on creation
+        if (error instanceof TaskApiError && error.status === 404) {
+          log.debug({ taskId }, 'Task not found (temp task), keeping local state only');
+          return;
+        }
+        // Rollback on other errors
+        const newTaskModels = { ...taskModels };
+        const newTaskProviders = { ...taskProviders };
+        delete newTaskModels[taskId];
+        delete newTaskProviders[taskId];
+        set({ taskModels: newTaskModels, taskProviders: newTaskProviders });
+        log.error({ error, taskId }, 'Failed to save task model');
       }
     } else {
       // No taskId: save as global default

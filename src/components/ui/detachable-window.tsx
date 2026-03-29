@@ -242,13 +242,13 @@ export function DetachableWindow({
           className="flex items-center justify-between px-3 py-2 border-b bg-muted/30 select-none gap-2 relative"
           style={{ height: `${HEADER_HEIGHT}px` }}
         >
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2 shrink-0">
             {title || (
               <span className="text-sm font-medium">Chat</span>
             )}
           </div>
           {titleCenter && (
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-sm text-muted-foreground text-center line-clamp-2 max-w-[50%] leading-tight font-medium">
+            <div className="absolute left-[55%] top-1/2 -translate-x-1/2 -translate-y-1/2 text-sm text-muted-foreground text-center line-clamp-2 max-w-[80%] leading-tight font-medium">
               {titleCenter}
             </div>
           )}
@@ -304,7 +304,7 @@ export function DetachableWindow({
           onMouseDown={handleDragStart}
           style={{ height: `${HEADER_HEIGHT}px` }}
         >
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2 shrink-0">
             {title || (
               <>
                 <GripVertical className="size-4 text-muted-foreground shrink-0" />
@@ -315,7 +315,7 @@ export function DetachableWindow({
           {titleCenter && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-sm text-muted-foreground text-center line-clamp-2 max-w-[50%] leading-tight font-medium">
+                <div className="absolute left-[55%] top-1/2 -translate-x-1/2 -translate-y-1/2 text-sm text-muted-foreground text-center line-clamp-2 max-w-[80%] leading-tight font-medium">
                   {titleCenter}
                 </div>
               </TooltipTrigger>

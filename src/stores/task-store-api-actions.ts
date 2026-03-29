@@ -7,6 +7,7 @@
 
 import type { Task, TaskStatus } from '@/types';
 import { createLogger } from '@/lib/logger';
+import * as taskApiService from '@/lib/services/task-api-service';
 
 const log = createLogger('TaskStore');
 
@@ -31,10 +32,7 @@ export async function fetchTasksAction(
   set: (fn: (s: { tasks: Task[] }) => Partial<{ tasks: Task[] }>) => void
 ): Promise<void> {
   try {
-    const query = projectIds.length > 0 ? `?projectIds=${projectIds.join(',')}` : '';
-    const res = await fetch(`/api/tasks${query}`);
-    if (!res.ok) throw new Error('Failed to fetch tasks');
-    const tasks = await res.json();
+    const tasks = await taskApiService.listTasks({ projectIds });
     set(() => ({ tasks }));
   } catch (error) {
     log.error({ error }, 'Error fetching tasks');
@@ -51,13 +49,7 @@ export async function createTaskAction(
   pendingFileIds?: any[]
 ): Promise<Task> {
   try {
-    const res = await fetch('/api/tasks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectId, title, description, pendingFileIds }),
-    });
-    if (!res.ok) throw new Error('Failed to create task');
-    const task = await res.json();
+    const task = await taskApiService.createTask({ projectId, title, description, pendingFileIds });
     get().addTask(task);
     get().setCreatingTask(false);
     return task;
@@ -70,18 +62,12 @@ export async function createTaskAction(
 // ── duplicateTask ──────────────────────────────────────────────────────────
 
 export async function duplicateTaskAction(task: Task, get: TaskStoreGetFn): Promise<Task> {
-  const res = await fetch('/api/tasks', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      projectId: task.projectId,
-      title: task.title,
-      description: task.description,
-      status: 'todo',
-    }),
+  const newTask = await taskApiService.createTask({
+    projectId: task.projectId,
+    title: task.title,
+    description: task.description || undefined,
+    status: 'todo',
   });
-  if (!res.ok) throw new Error('Failed to duplicate task');
-  const newTask = await res.json();
   get().addTask(newTask);
   return newTask;
 }
@@ -97,7 +83,7 @@ export async function deleteTasksByStatusAction(
   set((state) => ({ tasks: state.tasks.filter((t) => t.status !== status) }));
   try {
     await Promise.all(
-      tasksToDelete.map((t) => fetch(`/api/tasks/${t.id}`, { method: 'DELETE' }))
+      tasksToDelete.map((t) => taskApiService.deleteTask(t.id))
     );
   } catch (error) {
     log.error({ error }, 'Error deleting tasks by status');

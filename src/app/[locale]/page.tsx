@@ -12,6 +12,7 @@ import { AccessAnywhereWizard } from '@/components/access-anywhere';
 import { TerminalPanel } from '@/components/terminal/terminal-panel';
 import { useProjectStore } from '@/stores/project-store';
 import { useTaskStore } from '@/stores/task-store';
+import { useButlerStore } from '@/stores/butler-store';
 import { useFloatingWindowsStore } from '@/stores/floating-windows-store';
 import { useTunnelStore } from '@/stores/tunnel-store';
 import { useAgentFactoryUIStore } from '@/stores/agent-factory-ui-store';
@@ -73,6 +74,8 @@ function KanbanApp() {
 
   const { projects, selectedProjectIds, loading: projectLoading, error: projectError } = useProjectStore();
   const { selectedTask, setSelectedTask, setPendingAutoStartTask, setSelectedTaskId } = useTaskStore();
+  const butlerEnabled = useButlerStore(s => s.enabled);
+  const butlerProjectId = useButlerStore(s => s.projectId);
 
   const autoShowSetup = !projectLoading && !projectError && projects.length === 0;
 
@@ -88,9 +91,25 @@ function KanbanApp() {
   // Fetch tasks when project selection changes
   useEffect(() => {
     if (!projectLoading) {
-      useTaskStore.getState().fetchTasks(selectedProjectIds);
+      let projectIds = selectedProjectIds;
+      // Auto-include butler project when butler is enabled and user has selected specific projects
+      // Skip when all-projects mode (empty array) — butler tasks already included in that mode
+      if (butlerEnabled && butlerProjectId && projectIds.length > 0 && !projectIds.includes(butlerProjectId)) {
+        projectIds = [...projectIds, butlerProjectId];
+      }
+      useTaskStore.getState().fetchTasks(projectIds);
     }
-  }, [selectedProjectIds, projectLoading]);
+  }, [selectedProjectIds, projectLoading, butlerEnabled, butlerProjectId]);
+
+  // Re-fetch when butler status changes (handles delayed socket connection)
+  // This fixes timing issue where butler:status arrives after initial render
+  useEffect(() => {
+    if (!projectLoading && butlerEnabled && butlerProjectId && selectedProjectIds.length > 0) {
+      if (!selectedProjectIds.includes(butlerProjectId)) {
+        useTaskStore.getState().fetchTasks([...selectedProjectIds, butlerProjectId]);
+      }
+    }
+  }, [butlerEnabled, butlerProjectId, projectLoading, selectedProjectIds]);
 
   // Mobile: redirect panel selection to floating window
   useEffect(() => {

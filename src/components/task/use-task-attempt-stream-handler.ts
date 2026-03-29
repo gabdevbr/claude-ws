@@ -23,6 +23,7 @@ export function useTaskAttemptStreamHandler(
   {
     taskStatus,
     taskChatInit,
+    taskTitle,
     taskLastModel,
     taskLastProvider,
     taskDescription,
@@ -32,6 +33,7 @@ export function useTaskAttemptStreamHandler(
   }: {
     taskStatus: string;
     taskChatInit: boolean;
+    taskTitle?: string;
     taskLastModel?: string | null;
     taskLastProvider?: string | null;
     taskDescription?: string | null;
@@ -41,7 +43,7 @@ export function useTaskAttemptStreamHandler(
   }
 ) {
   const t = useTranslations('chat');
-  const { updateTaskStatus, setTaskChatInit, moveTaskToInProgress, setPendingAutoStartTask } = useTaskStore();
+  const { updateTaskStatus, setTaskChatInit, moveTaskToInProgress, setPendingAutoStartTask, renameTask } = useTaskStore();
   const { projects, activeProjectId, selectedProjectIds } = useProjectStore();
   const { getPendingFiles, clearFiles } = useAttachmentStore();
   const { getTaskModel, getTaskProvider } = useModelStore();
@@ -129,7 +131,17 @@ export function useTaskAttemptStreamHandler(
   const handlePromptSubmit = (prompt: string, displayPrompt?: string, fileIds?: string[]) => {
     if (!taskId) return;
     if (taskStatus !== 'in_progress') moveTaskToInProgress(taskId);
-    if (!taskChatInit && !hasSentFirstMessage) { setTaskChatInit(taskId, true); setHasSentFirstMessage(true); }
+    if (!taskChatInit && !hasSentFirstMessage) {
+      setTaskChatInit(taskId, true);
+      setHasSentFirstMessage(true);
+      // Auto-rename placeholder titles (e.g. "New Butler Task") to first message content
+      const textForTitle = (displayPrompt || prompt).trim();
+      if (taskTitle && /^New .* Task$/i.test(taskTitle) && textForTitle) {
+        const maxLen = 80;
+        const newTitle = textForTitle.length > maxLen ? textForTitle.slice(0, maxLen) + '...' : textForTitle;
+        renameTask(taskId, newTitle);
+      }
+    }
     lastCompletedTaskRef.current = null;
     const pendingFiles = getPendingFiles(taskId);
     setCurrentAttemptFiles(pendingFiles);

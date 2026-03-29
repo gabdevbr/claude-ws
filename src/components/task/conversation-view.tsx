@@ -17,6 +17,7 @@ import { renderMessage } from './conversation-view-content-block-renderer';
 import { ConversationHistoricalUserTurn } from './conversation-view-historical-user-turn';
 import { ConversationHistoricalAssistantTurn } from './conversation-view-historical-assistant-turn';
 import { ConversationViewStreamingPromptBubble } from './conversation-view-streaming-prompt-bubble';
+import * as taskApiService from '@/lib/services/task-api-service';
 
 interface ConversationViewProps {
   taskId: string;
@@ -25,6 +26,7 @@ interface ConversationViewProps {
   currentPrompt?: string;
   currentFiles?: PendingFile[];
   isRunning: boolean;
+  sendError?: string | null;
   activeQuestion?: ActiveQuestion | null;
   onOpenQuestion?: () => void;
   className?: string;
@@ -40,6 +42,7 @@ export function ConversationView({
   currentPrompt,
   currentFiles,
   isRunning,
+  sendError,
   activeQuestion,
   onOpenQuestion,
   className,
@@ -71,11 +74,8 @@ export function ConversationView({
     effectiveIsFetchingRef.current = true;
     try {
       if (!forceRefresh) setIsLoading(true);
-      const response = await fetch(`/api/tasks/${taskId}/conversation`);
-      if (response.ok) {
-        const data = await response.json();
-        setHistoricalTurns(data.turns || []);
-      }
+      const data = await taskApiService.getTaskConversation(taskId);
+      setHistoricalTurns((data as any)?.turns || []);
     } catch (error) {
       console.error('[ConversationView] Failed to load conversation history:', error);
     } finally {
@@ -100,19 +100,22 @@ export function ConversationView({
     if (currentAttemptId && prevId && currentAttemptId !== prevId) loadHistory(true);
   }, [currentAttemptId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Refresh history when the tab/window regains visibility or focus
+  // Refresh history when the tab/window regains visibility, focus, or network restores
   // This catches missed socket events from tab switches, network blips, etc.
   useEffect(() => {
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') loadHistory(true);
     };
     const handleFocus = () => loadHistory(true);
+    const handleOnline = () => loadHistory(true);
 
     document.addEventListener('visibilitychange', handleVisibility);
     window.addEventListener('focus', handleFocus);
+    window.addEventListener('online', handleOnline);
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       window.removeEventListener('focus', handleFocus);
+      window.removeEventListener('online', handleOnline);
     };
   }, [taskId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -124,7 +127,7 @@ export function ConversationView({
     );
   }
 
-  const isEmpty = !historicalTurns.length && !currentMessages.length && !isRunning;
+  const isEmpty = !historicalTurns.length && !currentMessages.length && !isRunning && !sendError;
   if (isEmpty) {
     return (
       <div className={cn('flex flex-col items-center justify-center h-full text-muted-foreground', className)}>
@@ -138,10 +141,14 @@ export function ConversationView({
     ? historicalTurns.filter(turn => turn.attemptId !== currentAttemptId)
     : historicalTurns;
 
-  const streamingVisible = currentAttemptId && (currentMessages.length > 0 || isRunning)
-    && !filteredHistoricalTurns.some(turn => turn.attemptId === currentAttemptId && turn.type === 'assistant');
+  // Optimistic UI: show prompt bubble immediately while waiting for server to assign attemptId
+  // Also keep prompt visible when there's a send error so the error shows below it
+  const isPendingStart = isRunning && !currentAttemptId && !!currentPrompt;
+  const hasSendError = !!sendError && !!currentPrompt;
+  const streamingVisible = isPendingStart || hasSendError || (currentAttemptId && (currentMessages.length > 0 || isRunning)
+    && !filteredHistoricalTurns.some(turn => turn.attemptId === currentAttemptId && turn.type === 'assistant'));
   const showStreamingPrompt = streamingVisible
-    && !filteredHistoricalTurns.some(turn => turn.attemptId === currentAttemptId && turn.type === 'user')
+    && (isPendingStart || hasSendError || !filteredHistoricalTurns.some(turn => turn.attemptId === currentAttemptId && turn.type === 'user'))
     && !!currentPrompt;
 
   return (
@@ -157,6 +164,12 @@ export function ConversationView({
           <>
             {showStreamingPrompt && (
               <ConversationViewStreamingPromptBubble prompt={currentPrompt!} files={currentFiles} />
+            )}
+            {sendError && (
+              <div className="flex items-center gap-2 text-destructive text-sm py-1 px-1">
+                <span className="font-medium">{t('sendError')}:</span>
+                <span>{sendError}</span>
+              </div>
             )}
             <div className="space-y-4 w-full max-w-full overflow-hidden">
               {currentMessages.map((msg, idx) =>

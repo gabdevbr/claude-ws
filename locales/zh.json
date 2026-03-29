@@ -617,6 +617,7 @@
     "cancelled": "已取消",
     "detachToFloating": "分离为浮动窗口",
     "maximizeToPanel": "最大化为面板",
+    "sendError": "发送失败",
     "clearConversation": "清除对话",
     "clearConversationConfirm": "您确定要清除所有消息吗？此操作无法撤销。",
     "compactConversation": "压缩对话",
@@ -786,6 +787,18 @@
     "title": "404 - 页面未找到",
     "description": "您所查找的页面不存在。",
     "goHome": "返回首页"
+  },
+  "butler": {
+    "disabled": "管家已禁用",
+    "status_idle": "管家空闲",
+    "status_initializing": "管家启动中...",
+    "status_running": "管家运行中",
+    "status_reasoning": "管家思考中...",
+    "status_shutting_down": "管家停止中...",
+    "enable": "启用管家",
+    "disable": "禁用管家",
+    "openProject": "打开管家项目",
+    "startTask": "Butler Task"
   },
   "globalError": {
     "title": "出现错误！",

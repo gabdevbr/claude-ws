@@ -617,6 +617,7 @@
     "cancelled": "Annulé",
     "detachToFloating": "Détacher en fenêtre flottante",
     "maximizeToPanel": "Maximiser en panneau",
+    "sendError": "Échec de l'envoi",
     "clearConversation": "Effacer la conversation",
     "clearConversationConfirm": "Êtes-vous sûr de vouloir effacer tous les messages ? Cette action est irréversible.",
     "compactConversation": "Compacter la conversation",
@@ -786,6 +787,18 @@
     "title": "404 - Page introuvable",
     "description": "La page que vous recherchez n'existe pas.",
     "goHome": "Retourner à l'accueil"
+  },
+  "butler": {
+    "disabled": "Butler désactivé",
+    "status_idle": "Butler inactif",
+    "status_initializing": "Butler en démarrage...",
+    "status_running": "Butler actif",
+    "status_reasoning": "Butler en réflexion...",
+    "status_shutting_down": "Butler en arrêt...",
+    "enable": "Activer Butler",
+    "disable": "Désactiver Butler",
+    "openProject": "Ouvrir le projet Butler",
+    "startTask": "Butler Task"
   },
   "globalError": {
     "title": "Quelque chose s'est mal passé !",

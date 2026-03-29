@@ -3,9 +3,10 @@ import { db } from '@/lib/db';
 import type { TaskStatus } from '@/types';
 import { createLogger } from '@/lib/logger';
 import { createTaskService } from '@agentic-sdk/services/task/task-crud-and-reorder';
+import { createTaskServiceWithSocketEmit } from '@/lib/services/task-service-with-socket-emit';
 
 const log = createLogger('TaskReorder');
-const taskService = createTaskService(db);
+const taskService = createTaskServiceWithSocketEmit(createTaskService(db));
 
 interface ReorderItem {
   id: string;

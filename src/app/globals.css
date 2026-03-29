@@ -149,6 +149,9 @@
     input, textarea, select {
       font-size: 16px !important;
     }
+    textarea.text-override-small {
+      font-size: 12px !important;
+    }
 
     /* Ensure all fixed elements respect viewport bounds */
     .fixed {

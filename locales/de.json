@@ -617,6 +617,7 @@
     "cancelled": "Abgebrochen",
     "detachToFloating": "In schwebendes Fenster abtrennen",
     "maximizeToPanel": "Als Panel maximieren",
+    "sendError": "Senden fehlgeschlagen",
     "clearConversation": "Unterhaltung löschen",
     "clearConversationConfirm": "Sind Sie sicher, dass Sie alle Nachrichten löschen möchten? Dies kann nicht rückgängig gemacht werden.",
     "compactConversation": "Unterhaltung komprimieren",
@@ -786,6 +787,18 @@
     "title": "404 - Seite nicht gefunden",
     "description": "Die gesuchte Seite existiert nicht.",
     "goHome": "Zurück zur Startseite"
+  },
+  "butler": {
+    "disabled": "Butler deaktiviert",
+    "status_idle": "Butler inaktiv",
+    "status_initializing": "Butler startet...",
+    "status_running": "Butler aktiv",
+    "status_reasoning": "Butler denkt nach...",
+    "status_shutting_down": "Butler wird gestoppt...",
+    "enable": "Butler aktivieren",
+    "disable": "Butler deaktivieren",
+    "openProject": "Butler-Projekt öffnen",
+    "startTask": "Butler Task"
   },
   "globalError": {
     "title": "Etwas ist schiefgelaufen!",

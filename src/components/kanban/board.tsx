@@ -88,9 +88,12 @@ export function Board({ attempts = [], onCreateTask, searchQuery = '' }: BoardPr
       grouped.set(task.status, statusTasks);
     });
 
-    // Sort by position
+    // Sort by position, then by updatedAt desc as tiebreaker (most recently moved first)
     grouped.forEach((colTasks) => {
-      colTasks.sort((a, b) => a.position - b.position);
+      colTasks.sort((a, b) => {
+        if (a.position !== b.position) return a.position - b.position;
+        return (b.updatedAt || 0) - (a.updatedAt || 0);
+      });
     });
 
     return grouped;

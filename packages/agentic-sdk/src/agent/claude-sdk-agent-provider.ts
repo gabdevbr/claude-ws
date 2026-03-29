@@ -11,10 +11,11 @@ import { homedir } from 'os';
 import { query, type Query } from '@anthropic-ai/claude-agent-sdk';
 import { createRequire } from 'module';
 
-// Resolve cli.js path explicitly to work around pnpm nested node_modules layout
-// where the SDK's built-in dirname-based resolution fails
+// Resolve cli.js path by finding the SDK package directory first, then appending cli.js.
+// Direct subpath resolution fails because cli.js is not in the SDK's exports map.
 const require_ = createRequire(import.meta.url);
-const CLAUDE_CLI_PATH = require_.resolve('@anthropic-ai/claude-agent-sdk/cli.js');
+const sdkMainPath = require_.resolve('@anthropic-ai/claude-agent-sdk');
+const CLAUDE_CLI_PATH = join(sdkMainPath, '..', 'cli.js');
 import { adaptSDKMessage, isValidSDKMessage } from './claude-sdk-message-to-output-adapter';
 import type { SDKResultMessage } from './claude-sdk-message-to-output-adapter';
 import { createLogger } from '../lib/pino-logger';

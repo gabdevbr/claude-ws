@@ -617,6 +617,7 @@
     "cancelled": "Cancelado",
     "detachToFloating": "Desacoplar a ventana flotante",
     "maximizeToPanel": "Maximizar al panel",
+    "sendError": "Error al enviar",
     "clearConversation": "Limpiar Conversación",
     "clearConversationConfirm": "¿Está seguro de que desea borrar todos los mensajes? Esta acción no se puede deshacer.",
     "compactConversation": "Compactar Conversación",
@@ -786,6 +787,18 @@
     "title": "404 - Página No Encontrada",
     "description": "La página que busca no existe.",
     "goHome": "Volver al inicio"
+  },
+  "butler": {
+    "disabled": "Butler desactivado",
+    "status_idle": "Butler inactivo",
+    "status_initializing": "Butler iniciando...",
+    "status_running": "Butler activo",
+    "status_reasoning": "Butler pensando...",
+    "status_shutting_down": "Butler deteniéndose...",
+    "enable": "Activar Butler",
+    "disable": "Desactivar Butler",
+    "openProject": "Abrir proyecto Butler",
+    "startTask": "Butler Task"
   },
   "globalError": {
     "title": "¡Algo salió mal!",

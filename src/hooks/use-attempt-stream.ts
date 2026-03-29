@@ -24,10 +24,20 @@ interface UseAttemptStreamResult {
   currentAttemptId: string | null;
   currentPrompt: string | null;
   isRunning: boolean;
+  sendError: string | null;
   activeQuestion: ActiveQuestion | null;
   answerQuestion: (questions: Question[], answers: Record<string, string>) => void;
   cancelQuestion: () => void;
   refetchQuestion: () => Promise<void>;
+}
+
+interface PendingStart {
+  taskId: string;
+  prompt: string;
+  displayPrompt?: string;
+  fileIds?: string[];
+  model?: string;
+  provider?: string;
 }
 
 export function useAttemptStream(
@@ -40,12 +50,15 @@ export function useAttemptStream(
   // CRITICAL: Use ref to track currentAttemptId for synchronous filtering in socket callbacks
   // State is async and cannot be used to filter messages in real-time
   const currentAttemptIdRef = useRef<string | null>(null);
+  // Queue for start attempts made before socket is connected
+  const pendingStartRef = useRef<PendingStart | null>(null);
   const [messages, setMessages] = useState<ClaudeOutput[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [currentAttemptId, setCurrentAttemptId] = useState<string | null>(null);
   const [currentPrompt, setCurrentPrompt] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [activeQuestion, setActiveQuestion] = useState<ActiveQuestion | null>(null);
+  const [sendError, setSendError] = useState<string | null>(null);
   const { addRunningTask, removeRunningTask } = useRunningTasksStore();
 
   // Keep callback ref updated
@@ -63,6 +76,7 @@ export function useAttemptStream(
     setCurrentAttemptId,
     setIsRunning,
     setActiveQuestion,
+    setSendError,
   });
 
   // Question handling (fetch, answer, cancel)
@@ -95,6 +109,7 @@ export function useAttemptStream(
     setCurrentPrompt(null);
     setIsRunning(false);
     setActiveQuestion(null);
+    setSendError(null);
   }, [taskId]);
 
   // Ensure socket subscription when attempt ID and connection are both available
@@ -105,8 +120,18 @@ export function useAttemptStream(
   }, [isConnected, currentAttemptId]);
 
   const startAttempt = useCallback((taskId: string, prompt: string, displayPrompt?: string, fileIds?: string[], model?: string, provider?: string) => {
+    setSendError(null);
     const socket = socketRef.current;
-    if (!socket || !isConnected) return;
+    if (!socket || !isConnected) {
+      // Queue the start for when socket connects
+      pendingStartRef.current = { taskId, prompt, displayPrompt, fileIds, model, provider };
+      currentTaskIdRef.current = taskId;
+      setCurrentPrompt(displayPrompt || prompt);
+      setIsRunning(true);
+      addRunningTask(taskId);
+      return;
+    }
+    pendingStartRef.current = null;
     currentTaskIdRef.current = taskId;
     setCurrentPrompt(displayPrompt || prompt);
     setIsRunning(true);
@@ -118,6 +143,30 @@ export function useAttemptStream(
       socket.emit('attempt:subscribe', { attemptId: data.attemptId });
     });
     socket.emit('attempt:start', { taskId, prompt, displayPrompt, fileIds, model, provider });
+  }, [isConnected]);
+
+  // Flush queued start attempt once socket connects
+  useEffect(() => {
+    if (isConnected && pendingStartRef.current) {
+      const pending = pendingStartRef.current;
+      pendingStartRef.current = null;
+      const socket = socketRef.current;
+      if (!socket) return;
+      socket.once('attempt:started', (data: any) => {
+        currentAttemptIdRef.current = data.attemptId;
+        setCurrentAttemptId(data.attemptId);
+        setMessages([]);
+        socket.emit('attempt:subscribe', { attemptId: data.attemptId });
+      });
+      socket.emit('attempt:start', {
+        taskId: pending.taskId,
+        prompt: pending.prompt,
+        displayPrompt: pending.displayPrompt,
+        fileIds: pending.fileIds,
+        model: pending.model,
+        provider: pending.provider,
+      });
+    }
   }, [isConnected]);
 
   // Check for running attempt on mount/taskId change
@@ -154,5 +203,5 @@ export function useAttemptStream(
     startAttempt,
   });
 
-  return { messages, isConnected, startAttempt, cancelAttempt, interruptAndSend, currentAttemptId, currentPrompt, isRunning, activeQuestion, answerQuestion, cancelQuestion, refetchQuestion };
+  return { messages, isConnected, startAttempt, cancelAttempt, interruptAndSend, currentAttemptId, currentPrompt, isRunning, activeQuestion, answerQuestion, cancelQuestion, refetchQuestion, sendError };
 }

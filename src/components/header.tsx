@@ -28,6 +28,7 @@ import { ProjectSelector, ProjectSelectorContent } from '@/components/header/pro
 import { useQuestionsStore } from '@/stores/questions-store';
 import { useWorkflowStore } from '@/stores/workflow-store';
 import { useTranslations } from 'next-intl';
+import { ButlerStatusIndicator } from '@/components/butler/butler-status-indicator';
 
 interface HeaderProps {
   onCreateTask: () => void;
@@ -156,6 +157,9 @@ export function Header({ onCreateTask, onAddProject, searchQuery: externalSearch
               ({tasks.length} tasks)
             </span>
           </div>
+
+          {/* Butler status indicator */}
+          <ButlerStatusIndicator />
 
           {/* Questions panel toggle - visible on all viewports */}
           <TooltipProvider>

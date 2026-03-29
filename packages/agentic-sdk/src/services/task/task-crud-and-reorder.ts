@@ -3,7 +3,7 @@
  * Read-heavy query methods (conversation history, stats, running attempt) live in
  * task-attempt-and-conversation-queries.ts and are composed in here.
  */
-import { eq, and, desc, inArray } from 'drizzle-orm';
+import { eq, and, desc, inArray, gte, ne, sql } from 'drizzle-orm';
 import * as schema from '../../db/database-schema';
 import { generateId } from '../../lib/nanoid-id-generator';
 import { createTaskQueryMethods } from './task-attempt-and-conversation-queries';
@@ -85,6 +85,20 @@ export function createTaskService(db: any) {
     // --- reorder ---
 
     async reorder(taskId: string, newPosition: number, newStatus?: string) {
+      const task = db.select().from(schema.tasks).where(eq(schema.tasks.id, taskId)).get();
+      if (!task) return null;
+
+      const targetStatus = (newStatus || task.status) as any;
+
+      // Shift tasks at position >= newPosition up by 1 in the target column
+      await db.update(schema.tasks)
+        .set({ position: sql`${schema.tasks.position} + 1` })
+        .where(and(
+          eq(schema.tasks.status, targetStatus),
+          gte(schema.tasks.position, newPosition),
+          ne(schema.tasks.id, taskId)
+        ));
+
       const updates: any = { position: newPosition, updatedAt: Date.now() };
       if (newStatus) updates.status = newStatus;
       await db.update(schema.tasks).set(updates).where(eq(schema.tasks.id, taskId));

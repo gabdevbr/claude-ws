@@ -6,9 +6,10 @@ import { UPLOADS_DIR } from '@/lib/file-utils';
 import type { TaskStatus } from '@/types';
 import { createLogger } from '@/lib/logger';
 import { createTaskService } from '@agentic-sdk/services/task/task-crud-and-reorder';
+import { createTaskServiceWithSocketEmit } from '@/lib/services/task-service-with-socket-emit';
 
 const log = createLogger('TaskById');
-const taskService = createTaskService(db);
+const taskService = createTaskServiceWithSocketEmit(createTaskService(db));
 
 // GET /api/tasks/[id] - Get a single task
 export async function GET(

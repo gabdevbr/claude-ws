@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/context-menu';
 import { useTaskStore } from '@/stores/task-store';
 import { toast } from 'sonner';
+import * as taskApiService from '@/lib/services/task-api-service';
 
 interface TaskCardContextMenuProps {
   task: Task;
@@ -52,7 +53,7 @@ export function TaskCardContextMenu({ task, children }: TaskCardContextMenuProps
   const handleDelete = useCallback(async () => {
     if (!confirm(tTask('deleteTaskConfirm', { title: task.title }))) return;
     try {
-      await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' });
+      await taskApiService.deleteTask(task.id);
       deleteTask(task.id);
     } catch (error) {
       console.error('Failed to delete task:', error);

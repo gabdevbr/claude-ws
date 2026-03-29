@@ -45,11 +45,12 @@ export function FloatingChatWindow({ task, zIndex, onClose, onMaximize, onFocus 
   const titleSpanRef = useRef<HTMLSpanElement>(null);
   const [titleMinWidth, setTitleMinWidth] = useState(0);
 
-  const { messages, cancelAttempt, isRunning, currentAttemptId, currentPrompt, activeQuestion, answerQuestion, cancelQuestion, refetchQuestion, hasSentFirstMessage, currentAttemptFiles, handlePromptSubmit, handleInterruptAndSend } = useTaskAttemptStreamHandler(
+  const { messages, cancelAttempt, isRunning, currentAttemptId, currentPrompt, activeQuestion, answerQuestion, cancelQuestion, refetchQuestion, hasSentFirstMessage, currentAttemptFiles, handlePromptSubmit, handleInterruptAndSend, sendError } = useTaskAttemptStreamHandler(
     task.id,
     {
       taskStatus: task.status,
       taskChatInit: task.chatInit,
+      taskTitle: task.title,
       taskLastModel: task.lastModel,
       taskLastProvider: task.lastProvider,
       taskDescription: task.description,
@@ -131,6 +132,16 @@ export function FloatingChatWindow({ task, zIndex, onClose, onMaximize, onFocus 
       initialSize={{ width: 500, height: 600 }}
       footer={renderFooter()}
       storageKey={`chat-${task.id}`}
+      zIndex={zIndex}
+      onFocus={onFocus}
+      title={
+        <TaskStatusBadgeDropdown
+          currentStatus={task.status}
+          showDropdown={showStatusDropdown}
+          onToggleDropdown={() => setShowStatusDropdown(!showStatusDropdown)}
+          onSelectStatus={async (s: TaskStatus) => { setShowStatusDropdown(false); if (s !== task.status) await updateTaskStatus(task.id, s); }}
+        />
+      }
       titleCenter={
         isEditingTitle ? (
           <textarea
@@ -143,43 +154,33 @@ export function FloatingChatWindow({ task, zIndex, onClose, onMaximize, onFocus 
               if (e.key === 'Enter') { e.preventDefault(); handleSaveTitle(); }
               else if (e.key === 'Escape') { setIsEditingTitle(false); setEditTitleValue(''); }
             }}
-            className="text-sm font-medium bg-transparent border-b border-primary/50 outline-none text-center max-w-full resize-none overflow-hidden"
+            className="text-xs text-override-small bg-transparent border-b border-primary/50 outline-none text-center max-w-full resize-none overflow-hidden"
             rows={Math.min(Math.ceil(editTitleValue.length / 30) || 1, 2)}
             style={{ width: `${Math.min(Math.max(editTitleValue.length + 2, 8), 32)}ch`, minWidth: titleMinWidth > 0 ? `${titleMinWidth}px` : undefined }}
             onClick={(e) => e.stopPropagation()}
             onMouseDown={(e) => e.stopPropagation()}
           />
         ) : (
-          <div className="flex items-center gap-1 cursor-grab active:cursor-grabbing">
-            <span ref={titleSpanRef} className="line-clamp-2">{task.title}</span>
-            <button
-              onClick={(e) => { e.stopPropagation(); setTitleMinWidth(titleSpanRef.current?.offsetWidth || 0); setEditTitleValue(task.title); setIsEditingTitle(true); setTimeout(() => titleInputRef.current?.focus(), 0); }}
-              onMouseDown={(e) => e.stopPropagation()}
-              className="p-0.5 hover:bg-accent rounded transition-colors shrink-0 cursor-pointer"
-              data-no-drag
-              title={tCommon('editTitle')}
-            >
-              <Pencil className="size-3 text-muted-foreground" />
-            </button>
-          </div>
+          <span ref={titleSpanRef} className="text-sm font-medium text-muted-foreground line-clamp-2 text-center leading-tight">{task.title}</span>
         )
       }
-      zIndex={zIndex}
-      onFocus={onFocus}
-      title={
-        <TaskStatusBadgeDropdown
-          currentStatus={task.status}
-          showDropdown={showStatusDropdown}
-          onToggleDropdown={() => setShowStatusDropdown(!showStatusDropdown)}
-          onSelectStatus={async (s: TaskStatus) => { setShowStatusDropdown(false); if (s !== task.status) await updateTaskStatus(task.id, s); }}
-        />
-      }
       headerEnd={
-        !isMobile ? (
-          <Button variant="ghost" size="icon-sm" onClick={onMaximize} title={t('maximizeToPanel')}>
-            <Maximize2 className="size-4" />
-          </Button>
-        ) : undefined
+        <div className="flex items-center gap-1">
+          <button
+            onClick={(e) => { e.stopPropagation(); setTitleMinWidth(titleSpanRef.current?.offsetWidth || 0); setEditTitleValue(task.title); setIsEditingTitle(true); setTimeout(() => titleInputRef.current?.focus(), 0); }}
+            onMouseDown={(e) => e.stopPropagation()}
+            className="p-0.5 hover:bg-accent rounded transition-colors shrink-0 cursor-pointer mr-2"
+            data-no-drag
+            title={tCommon('editTitle')}
+          >
+            <Pencil className="size-3 text-muted-foreground" />
+          </button>
+          {!isMobile && (
+            <Button variant="ghost" size="icon-sm" onClick={onMaximize} title={t('maximizeToPanel')}>
+              <Maximize2 className="size-4" />
+            </Button>
+          )}
+        </div>
       }
     >
       <div className="flex-1 overflow-hidden min-w-0 relative z-0">
@@ -190,6 +191,7 @@ export function FloatingChatWindow({ task, zIndex, onClose, onMaximize, onFocus 
           currentPrompt={currentPrompt || undefined}
           currentFiles={isRunning ? currentAttemptFiles : undefined}
           isRunning={isRunning}
+          sendError={sendError}
           activeQuestion={activeQuestion}
           onOpenQuestion={(isRunning || activeQuestion) ? () => { if (!activeQuestion) refetchQuestion(); } : undefined}
         />

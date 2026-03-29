@@ -11,6 +11,7 @@ import { TeamChatTab } from './team-chat-tab';
 import { AgentDetailTab } from './agent-detail-tab';
 import { TaskListTab } from './task-list-tab';
 import { cn } from '@/lib/utils';
+import * as taskApiService from '@/lib/services/task-api-service';
 
 interface TeamViewProps {
   className?: string;
@@ -25,9 +26,8 @@ interface TeamViewProps {
  */
 async function fetchWorkflowFromDb(taskId: string): Promise<{ attemptId: string; data: any } | null> {
   try {
-    const res = await fetch(`/api/tasks/${taskId}/attempts`);
-    if (!res.ok) return null;
-    const { attempts } = await res.json();
+    const data = await taskApiService.getTaskAttempts(taskId);
+    const attempts = data && 'attempts' in data ? data.attempts : data;
     if (!attempts?.length) return null;
 
     const sorted = attempts.sort((a: any, b: any) => b.createdAt - a.createdAt);

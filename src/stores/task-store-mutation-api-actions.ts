@@ -9,6 +9,7 @@
 import type { Task, TaskStatus } from '@/types';
 import { createLogger } from '@/lib/logger';
 import type { TaskStoreSetFn, TaskStoreGetFn } from './task-store-api-actions';
+import * as taskApiService from '@/lib/services/task-api-service';
 
 const log = createLogger('TaskStore');
 
@@ -37,12 +38,7 @@ export async function reorderTasksAction(
   set(() => ({ tasks: updatedTasks }));
 
   try {
-    const res = await fetch('/api/tasks/reorder', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ taskId, status: newStatus, position: newPosition }),
-    });
-    if (!res.ok) { set(() => ({ tasks: oldTasks })); throw new Error('Failed to reorder tasks'); }
+    await taskApiService.reorderTask(taskId, newStatus, newPosition);
   } catch (error) {
     log.error({ error, taskId }, 'Error reordering tasks');
     set(() => ({ tasks: oldTasks }));
@@ -75,12 +71,7 @@ export async function updateTaskStatusAction(
   }
 
   try {
-    const res = await fetch('/api/tasks/reorder', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ taskId, status, position: newPosition }),
-    });
-    if (!res.ok) throw new Error('Failed to update task status');
+    await taskApiService.reorderTask(taskId, status, newPosition);
   } catch (error) {
     log.error({ error, taskId }, 'Error updating task status');
     set(() => ({ tasks: oldTasks }));
@@ -103,12 +94,7 @@ export async function renameTaskAction(
   const selected = get().selectedTask;
   if (selected?.id === taskId) set(() => ({ selectedTask: { ...selected, title } }));
   try {
-    const res = await fetch(`/api/tasks/${taskId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title }),
-    });
-    if (!res.ok) throw new Error('Failed to rename task');
+    await taskApiService.updateTask(taskId, { title });
   } catch (error) {
     get().updateTask(taskId, { title: task.title });
     const sel = get().selectedTask;
@@ -130,12 +116,7 @@ export async function updateTaskDescriptionAction(
   const selected = get().selectedTask;
   if (selected?.id === taskId) set(() => ({ selectedTask: { ...selected, description } }));
   try {
-    const res = await fetch(`/api/tasks/${taskId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description }),
-    });
-    if (!res.ok) throw new Error('Failed to update task description');
+    await taskApiService.updateTask(taskId, { description });
   } catch (error) {
     get().updateTask(taskId, { description: task.description });
     const sel = get().selectedTask;
@@ -155,12 +136,7 @@ export async function setTaskChatInitAction(
   const selected = get().selectedTask;
   if (selected?.id === taskId) set(() => ({ selectedTask: { ...selected, chatInit } }));
   try {
-    const res = await fetch(`/api/tasks/${taskId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chatInit }),
-    });
-    if (!res.ok) throw new Error('Failed to update task chatInit');
+    await taskApiService.updateTask(taskId, { chatInit });
   } catch (error) {
     log.error({ error, taskId }, 'Error updating task chatInit');
     get().updateTask(taskId, { chatInit: !chatInit });

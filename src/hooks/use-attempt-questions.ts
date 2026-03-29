@@ -5,6 +5,7 @@ import type { Socket } from 'socket.io-client';
 import type { ClaudeOutput } from '@/types';
 import { useRunningTasksStore } from '@/stores/running-tasks-store';
 import { createLogger } from '@/lib/logger';
+import * as taskApiService from '@/lib/services/task-api-service';
 
 const log = createLogger('AttemptQuestionsHook');
 
@@ -73,9 +74,7 @@ export function useAttemptQuestions({
   const fetchPersistentQuestion = useCallback(async (taskIdParam: string, signal?: AbortSignal) => {
     try {
       console.log('[fetchPersistentQuestion] Fetching for task:', taskIdParam);
-      const res = await fetch(`/api/tasks/${taskIdParam}/pending-question`, { cache: 'no-store', signal });
-      if (!res.ok) return;
-      const data = await res.json();
+      const data = await taskApiService.getPendingQuestion(taskIdParam, { cache: 'no-store', signal });
       console.log('[fetchPersistentQuestion] Result:', data.question ? `Found (toolUseId: ${data.question.toolUseId})` : 'No persistent question');
       if (data.question) {
         setActiveQuestion(data.question);
@@ -91,12 +90,9 @@ export function useAttemptQuestions({
 
     if (!attemptId && taskId) {
       try {
-        const res = await fetch(`/api/tasks/${taskId}/running-attempt`, { cache: 'no-store' });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.attempt?.status === 'running') {
-            attemptId = data.attempt.id;
-          }
+        const data = await taskApiService.getRunningAttempt(taskId, { cache: 'no-store' });
+        if (data.attempt?.status === 'running') {
+          attemptId = data.attempt.id;
         }
       } catch {
         // Fall through

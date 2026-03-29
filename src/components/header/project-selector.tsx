@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { FolderOpen, Plus, ChevronDown, X, Settings } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { FolderOpen, Plus, ChevronDown, X, Settings, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -40,10 +40,19 @@ export function ProjectSelectorContent({ onAddProject }: ProjectSelectorProps) {
     deleteProject,
   } = useProjectStore();
 
+  const [filterQuery, setFilterQuery] = useState('');
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsProjectId, setSettingsProjectId] = useState<string | null>(null);
+
+  const filteredProjects = useMemo(() => {
+    if (!filterQuery.trim()) return projects;
+    const q = filterQuery.toLowerCase();
+    return projects.filter(
+      (p) => p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q)
+    );
+  }, [projects, filterQuery]);
 
   const openSettings = (projectId: string) => {
     setSettingsProjectId(projectId);
@@ -82,14 +91,32 @@ export function ProjectSelectorContent({ onAddProject }: ProjectSelectorProps) {
       </DropdownMenuCheckboxItem>
       <DropdownMenuSeparator />
 
+      {/* Filter input */}
+      {projects.length > 1 && (
+        <div className="px-2 py-1.5">
+          <div className="flex items-center gap-1.5 rounded-md border border-input bg-background px-2 py-1">
+            <Search className="h-3 w-3 text-muted-foreground shrink-0" />
+            <input
+              type="text"
+              placeholder="Filter projects..."
+              value={filterQuery}
+              onChange={(e) => setFilterQuery(e.target.value)}
+              className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Project list - max 5 visible, scroll for more */}
       <div className="max-h-[180px] overflow-y-auto">
-        {projects.length === 0 ? (
+        {filteredProjects.length === 0 ? (
           <div className="px-2 py-1.5 text-sm text-muted-foreground">
-            {tCommon('noProjectsYet')}
+            {filterQuery ? 'No matching projects' : tCommon('noProjectsYet')}
           </div>
         ) : (
-          projects.map((project) => {
+          filteredProjects.map((project) => {
             const isSelected = allMode || selectedProjectIds.includes(project.id);
             return (
               <div

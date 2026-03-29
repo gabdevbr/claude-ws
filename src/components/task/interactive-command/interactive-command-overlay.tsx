@@ -15,6 +15,7 @@ import { ConfigEditor } from './config-editor';
 import { ConfirmDialog } from './confirm-dialog';
 import { cn } from '@/lib/utils';
 import { useTranslations } from 'next-intl';
+import * as taskApiService from '@/lib/services/task-api-service';
 
 // Get icon for command type
 function getCommandIcon(command: InteractiveCommand) {
@@ -114,12 +115,7 @@ export function InteractiveCommandOverlay() {
               const { setLoading, setError } = useInteractiveCommandStore.getState();
               setLoading(true);
               try {
-                const res = await fetch(`/api/tasks/${activeCommand.taskId}/compact`, { method: 'POST' });
-                if (!res.ok) {
-                  const data = await res.json();
-                  setError(data.error || 'Failed to compact');
-                  return;
-                }
+                await taskApiService.compactTask(activeCommand.taskId);
                 closeCommand();
               } catch (err) {
                 setError('Failed to compact conversation');

@@ -18,7 +18,7 @@ export function ConversationViewStreamingPromptBubble({
   files,
 }: ConversationViewStreamingPromptBubbleProps) {
   return (
-    <div className="flex justify-end w-full max-w-full">
+    <div className="flex justify-end w-full max-w-full pl-10">
       <div className="bg-primary/10 rounded-lg px-4 py-3 text-[15px] leading-relaxed break-words space-y-3 max-w-[85%] overflow-hidden">
         <div className="whitespace-pre-wrap">{prompt}</div>
         {files && files.length > 0 && (

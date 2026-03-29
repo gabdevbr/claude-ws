@@ -617,6 +617,7 @@
     "cancelled": "취소됨",
     "detachToFloating": "플로팅 창으로 분리",
     "maximizeToPanel": "패널로 최대화",
+    "sendError": "전송 실패",
     "clearConversation": "대화 지우기",
     "clearConversationConfirm": "모든 메시지를 지우시겠습니까? 이 작업은 취소할 수 없습니다.",
     "compactConversation": "대화 압축",
@@ -786,6 +787,18 @@
     "title": "404 - 페이지를 찾을 수 없음",
     "description": "찾고 있는 페이지가 존재하지 않습니다.",
     "goHome": "홈으로 돌아가기"
+  },
+  "butler": {
+    "disabled": "버틀러 비활성화",
+    "status_idle": "버틀러 대기 중",
+    "status_initializing": "버틀러 시작 중...",
+    "status_running": "버틀러 활성",
+    "status_reasoning": "버틀러 생각 중...",
+    "status_shutting_down": "버틀러 종료 중...",
+    "enable": "버틀러 활성화",
+    "disable": "버틀러 비활성화",
+    "openProject": "버틀러 프로젝트 열기",
+    "startTask": "Butler Task"
   },
   "globalError": {
     "title": "문제가 발생했습니다!",

@@ -10,9 +10,11 @@ import { useTranslations } from 'next-intl';
 import { TaskCardContextMenu } from './task-card-context-menu';
 import { useTaskStore } from '@/stores/task-store';
 import { useProjectStore } from '@/stores/project-store';
+import { useButlerStore } from '@/stores/butler-store';
 import { useQuestionsStore } from '@/stores/questions-store';
 import { useWorkflowStore } from '@/stores/workflow-store';
 import type { ChatHistoryMatch } from '@/hooks/use-chat-history-search';
+import * as taskApiService from '@/lib/services/task-api-service';
 
 function formatRelativeTime(timestamp: number): string {
   const now = Date.now();
@@ -52,6 +54,7 @@ interface TaskCardProps {
 export function TaskCard({ task, attemptCount = 0, searchQuery = '', isMobile = false, chatHistoryMatch }: TaskCardProps) {
   const { selectedTaskId, selectTask, deleteTask } = useTaskStore();
   const { projects, selectedProjectIds, isAllProjectsMode } = useProjectStore();
+  const butlerEnabled = useButlerStore(s => s.enabled);
   const { getByTaskId } = useQuestionsStore();
   const { getByTaskId: getWorkflowByTaskId } = useWorkflowStore();
   const tTask = useTranslations('task');
@@ -79,8 +82,10 @@ export function TaskCard({ task, attemptCount = 0, searchQuery = '', isMobile = 
     );
   };
 
-  // Show project badge when viewing multiple projects
-  const showProjectBadge = isAllProjectsMode() || selectedProjectIds.length > 1;
+  const butlerProjectId = useButlerStore(s => s.projectId);
+  // Show badge: multi-project mode always, or butler-injected tasks only when single project selected
+  const isButlerTask = butlerEnabled && butlerProjectId && task.projectId === butlerProjectId;
+  const showProjectBadge = isAllProjectsMode() || selectedProjectIds.length > 1 || isButlerTask;
   const projectName = projects.find(p => p.id === task.projectId)?.name;
   const showDeleteButton = task.status === 'done' || task.status === 'cancelled';
 
@@ -88,7 +93,7 @@ export function TaskCard({ task, attemptCount = 0, searchQuery = '', isMobile = 
     e.stopPropagation();
     if (!confirm(tTask('deleteTaskConfirm', { title: task.title }))) return;
     try {
-      await fetch(`/api/tasks/${task.id}`, { method: 'DELETE' });
+      await taskApiService.deleteTask(task.id);
       deleteTask(task.id);
     } catch (error) {
       console.error('Failed to delete task:', error);
