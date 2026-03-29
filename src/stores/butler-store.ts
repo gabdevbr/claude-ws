@@ -27,6 +27,7 @@ interface ButlerStoreState {
   unreadCount: number;
   createTaskDialogOpen: boolean;
   schedulerDialogOpen: boolean;
+  draftButlerTaskMessage: string;
 }
 
 interface ButlerStoreActions {
@@ -36,6 +37,8 @@ interface ButlerStoreActions {
   clearNotifications: () => void;
   setCreateTaskDialogOpen: (open: boolean) => void;
   setSchedulerDialogOpen: (open: boolean) => void;
+  setDraftButlerTaskMessage: (message: string) => void;
+  clearDraftButlerTaskMessage: () => void;
 }
 
 const MAX_NOTIFICATIONS = 50;
@@ -50,6 +53,7 @@ export const useButlerStore = create<ButlerStoreState & ButlerStoreActions>((set
   unreadCount: 0,
   createTaskDialogOpen: false,
   schedulerDialogOpen: false,
+  draftButlerTaskMessage: '',
 
   updateStatus: (data) =>
     set((prev) => ({ ...prev, ...data })),
@@ -75,4 +79,8 @@ export const useButlerStore = create<ButlerStoreState & ButlerStoreActions>((set
   setCreateTaskDialogOpen: (open) => set({ createTaskDialogOpen: open }),
 
   setSchedulerDialogOpen: (open) => set({ schedulerDialogOpen: open }),
+
+  setDraftButlerTaskMessage: (message) => set({ draftButlerTaskMessage: message }),
+
+  clearDraftButlerTaskMessage: () => set({ draftButlerTaskMessage: '' }),
 }));

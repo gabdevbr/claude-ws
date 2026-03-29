@@ -32,19 +32,23 @@ export function CreateButlerTaskDialog() {
   const projectId = useButlerStore(s => s.projectId);
   const open = useButlerStore(s => s.createTaskDialogOpen);
   const setOpen = useButlerStore(s => s.setCreateTaskDialogOpen);
+  const draftButlerTaskMessage = useButlerStore(s => s.draftButlerTaskMessage);
+  const setDraftButlerTaskMessage = useButlerStore(s => s.setDraftButlerTaskMessage);
+  const clearDraftButlerTaskMessage = useButlerStore(s => s.clearDraftButlerTaskMessage);
   const { getUploadedFileIds, clearFiles, getPendingFiles, moveFiles, hasUploadingFiles } = useAttachmentStore();
   const { buildPromptWithMentions, getMentions, clearMentions } = useContextMentionStore();
 
-  const [chatPrompt, setChatPrompt] = useState('');
+  const [chatPrompt, setChatPrompt] = useState(draftButlerTaskMessage);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tempTaskId, setTempTaskId] = useState('');
 
   const projectPath = projectId ? projects.find(p => p.id === projectId)?.path : undefined;
 
-  // Generate new temp task ID when dialog opens
+  // Restore draft and generate new temp task ID when dialog opens
   useEffect(() => {
     if (open) {
+      setChatPrompt(draftButlerTaskMessage);
       setTempTaskId(`${TEMP_TASK_PREFIX}${Date.now()}`);
     }
   }, [open]);
@@ -108,9 +112,10 @@ export function CreateButlerTaskDialog() {
         fileIds.length > 0 ? fileIds : undefined,
       );
 
-      // Reset and close
+      // Reset, clear draft, and close
       setChatPrompt('');
       setTempTaskId('');
+      clearDraftButlerTaskMessage();
       setOpen(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('failedToCreate'));
@@ -122,11 +127,12 @@ export function CreateButlerTaskDialog() {
   const handleOpenChange = (newOpen: boolean) => {
     if (isSubmitting) return;
     if (!newOpen) {
+      // Save draft text to store before closing
+      setDraftButlerTaskMessage(chatPrompt);
       if (tempTaskId) {
         clearFiles(tempTaskId);
         clearMentions(tempTaskId);
       }
-      setChatPrompt('');
       setError(null);
       setTempTaskId('');
     }
@@ -161,6 +167,8 @@ export function CreateButlerTaskDialog() {
             hideStats
             taskId={tempTaskId}
             projectPath={projectPath}
+            initialValue={draftButlerTaskMessage}
+            autoSelect={!!draftButlerTaskMessage}
             minRows={2}
             maxRows={4}
           />

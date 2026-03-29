@@ -25,6 +25,8 @@ interface TaskStore {
   pendingAutoStartTask: string | null;
   pendingAutoStartPrompt: string | null;
   pendingAutoStartFileIds: string[] | null;
+  draftCreateTaskTitle: string;
+  draftCreateTaskMessage: string;
 
   // Sync actions
   setTasks: (tasks: Task[]) => void;
@@ -36,6 +38,8 @@ interface TaskStore {
   setSelectedTaskId: (id: string | null) => void;
   setCreatingTask: (isCreating: boolean) => void;
   setPendingAutoStartTask: (taskId: string | null, prompt?: string, fileIds?: string[]) => void;
+  setDraftCreateTask: (title: string, message: string) => void;
+  clearDraftCreateTask: () => void;
 
   // API actions (delegated to task-store-api-actions)
   fetchTasks: (projectIds: string[]) => Promise<void>;
@@ -58,10 +62,16 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
   pendingAutoStartTask: null,
   pendingAutoStartPrompt: null,
   pendingAutoStartFileIds: null,
+  draftCreateTaskTitle: '',
+  draftCreateTaskMessage: '',
 
   setTasks: (tasks) => set({ tasks }),
 
-  addTask: (task) => set((state) => ({ tasks: [...state.tasks, task] })),
+  addTask: (task) => set((state) => {
+    // Prevent duplicates from race between API response and socket event
+    if (state.tasks.some((t) => t.id === task.id)) return state;
+    return { tasks: [...state.tasks, task] };
+  }),
 
   updateTask: (id, updates) => set((state) => ({
     tasks: state.tasks.map((task) => task.id === id ? { ...task, ...updates } : task),
@@ -107,6 +117,16 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     pendingAutoStartTask: taskId,
     pendingAutoStartPrompt: prompt || null,
     pendingAutoStartFileIds: fileIds || null,
+  }),
+
+  setDraftCreateTask: (title, message) => set({
+    draftCreateTaskTitle: title,
+    draftCreateTaskMessage: message,
+  }),
+
+  clearDraftCreateTask: () => set({
+    draftCreateTaskTitle: '',
+    draftCreateTaskMessage: '',
   }),
 
   // API actions — delegate to companion module

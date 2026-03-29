@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import {
   Dialog,
@@ -40,7 +40,7 @@ const TEMP_TASK_PREFIX = '__create_dialog_temp__';
 
 export function CreateTaskDialog({ open, onOpenChange, onTaskCreated }: CreateTaskDialogProps) {
   const t = useTranslations('kanban');
-  const { createTask } = useTaskStore();
+  const { createTask, draftCreateTaskTitle, draftCreateTaskMessage, setDraftCreateTask, clearDraftCreateTask } = useTaskStore();
   const {
     projects,
     selectedProjectIds,
@@ -52,11 +52,12 @@ export function CreateTaskDialog({ open, onOpenChange, onTaskCreated }: CreateTa
   const { buildPromptWithMentions, getMentions, clearMentions } = useContextMentionStore();
   const { taskModels, setModel } = useModelStore();
 
-  const [title, setTitle] = useState('');
-  const [chatPrompt, setChatPrompt] = useState('');
+  const [title, setTitle] = useState(draftCreateTaskTitle);
+  const [chatPrompt, setChatPrompt] = useState(draftCreateTaskMessage);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   // Create a stable temporary task ID for file uploads in this dialog session
   // Generate new ID each time dialog opens
@@ -66,7 +67,7 @@ export function CreateTaskDialog({ open, onOpenChange, onTaskCreated }: CreateTa
   const availableProjects = getSelectedProjects();
   const isMultiProject = isAllProjectsMode() || selectedProjectIds.length !== 1;
 
-  // Set default project and generate new temp task ID when dialog opens
+  // Set default project, restore drafts, and generate new temp task ID when dialog opens
   useEffect(() => {
     if (open) {
       // Priority: activeProjectId > first selectedProjectId > first project
@@ -80,6 +81,15 @@ export function CreateTaskDialog({ open, onOpenChange, onTaskCreated }: CreateTa
       }
 
       setSelectedProjectId(defaultProject || '');
+
+      // Restore draft text from store
+      setTitle(draftCreateTaskTitle);
+      setChatPrompt(draftCreateTaskMessage);
+
+      // Select title input text if there's a draft title
+      if (draftCreateTaskTitle) {
+        setTimeout(() => titleInputRef.current?.select(), 50);
+      }
 
       // Generate new temp task ID for this dialog session
       setTempTaskId(`${TEMP_TASK_PREFIX}${Date.now()}`);
@@ -177,11 +187,11 @@ export function CreateTaskDialog({ open, onOpenChange, onTaskCreated }: CreateTa
       // Clear mentions for the temp task
       if (tempTaskId) clearMentions(tempTaskId);
 
-      // Reset form and clear temp task ID before closing dialog
-      // This ensures PromptInput gets a new key and clears its state
+      // Reset form, clear drafts, and close dialog
       setTitle('');
       setChatPrompt('');
       setTempTaskId('');
+      clearDraftCreateTask();
       onOpenChange(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : t('failedToCreate'));
@@ -193,13 +203,13 @@ export function CreateTaskDialog({ open, onOpenChange, onTaskCreated }: CreateTa
   const handleOpenChange = (newOpen: boolean) => {
     if (!isSubmitting) {
       if (!newOpen) {
+        // Save draft text to store before closing
+        setDraftCreateTask(title, chatPrompt);
         // Clear temp files and mentions when dialog is closed
         if (tempTaskId) {
           clearFiles(tempTaskId);
           clearMentions(tempTaskId);
         }
-        setTitle('');
-        setChatPrompt('');
         setSelectedProjectId('');
         setError(null);
         setTempTaskId('');
@@ -270,6 +280,8 @@ export function CreateTaskDialog({ open, onOpenChange, onTaskCreated }: CreateTa
               hideStats
               taskId={tempTaskId}
               projectPath={projects.find(p => p.id === selectedProjectId)?.path}
+              initialValue={draftCreateTaskMessage}
+              autoSelect={!!draftCreateTaskMessage}
               minRows={2}
               maxRows={4}
             />
@@ -280,6 +292,7 @@ export function CreateTaskDialog({ open, onOpenChange, onTaskCreated }: CreateTa
               {t('titleOptional')}
             </Label>
             <Input
+              ref={titleInputRef}
               id="title"
               placeholder={t('enterCustomTitle')}
               value={title}

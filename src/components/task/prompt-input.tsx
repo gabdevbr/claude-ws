@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, forwardRef, useImperativeHandle, FormEvent } from 'react';
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle, FormEvent } from 'react';
 import { FileDropZone } from './file-drop-zone';
 import { cn } from '@/lib/utils';
 import { usePromptMentions } from '@/components/task/prompt-input-mentions';
@@ -34,6 +34,7 @@ interface PromptInputProps {
   hideStats?: boolean;
   onChange?: (prompt: string) => void;
   initialValue?: string;
+  autoSelect?: boolean;
   minRows?: number;
   maxRows?: number;
 }
@@ -56,12 +57,26 @@ export const PromptInput = forwardRef<PromptInputRef, PromptInputProps>(({
   hideStats = false,
   onChange,
   initialValue,
+  autoSelect = false,
   minRows = 1,
   maxRows = 5,
 }, ref) => {
   const [prompt, setPrompt] = useState(initialValue || '');
   const [userHasTyped, setUserHasTyped] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // Auto-select all text on mount when autoSelect is true (e.g. restoring draft)
+  // Delay needed because Radix Dialog animation must complete before textarea is focusable
+  useEffect(() => {
+    if (!autoSelect || !prompt) return;
+    const timer = setTimeout(() => {
+      textareaRef.current?.focus();
+      textareaRef.current?.select();
+    }, 150);
+    return () => clearTimeout(timer);
+    // Only run on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const updatePrompt = (newPrompt: string) => {
     setPrompt(newPrompt);
