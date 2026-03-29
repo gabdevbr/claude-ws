@@ -88,6 +88,14 @@ export function TaskDetailPanel({ className }: TaskDetailPanelProps) {
     }
   }, [selectedTask?.id, selectedTask?.pendingFileIds, selectedTask?.chatInit, restoreFromDb]);
 
+  // Clear prompt input after auto-start sends the first message
+  useEffect(() => {
+    if (hasSentFirstMessage) {
+      const timer = setTimeout(() => promptInputRef.current?.clear(), 50);
+      return () => clearTimeout(timer);
+    }
+  }, [hasSentFirstMessage]);
+
   // Close status dropdown on outside click
   useEffect(() => {
     if (!showStatusDropdown) return;

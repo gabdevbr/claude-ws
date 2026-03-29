@@ -119,6 +119,27 @@ export function useAttemptStream(
     }
   }, [isConnected, currentAttemptId]);
 
+  // Restore pending question when user returns (tab visible, window focused, network back)
+  // Without this, if AskUserQuestion fires while user is away, the question form
+  // never renders when the user comes back — they only see the tool call step.
+  useEffect(() => {
+    if (!taskId) return;
+
+    const restore = () => refetchQuestion();
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') restore();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', restore);
+    window.addEventListener('online', restore);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', restore);
+      window.removeEventListener('online', restore);
+    };
+  }, [taskId, refetchQuestion]);
+
   const startAttempt = useCallback((taskId: string, prompt: string, displayPrompt?: string, fileIds?: string[], model?: string, provider?: string) => {
     setSendError(null);
     const socket = socketRef.current;

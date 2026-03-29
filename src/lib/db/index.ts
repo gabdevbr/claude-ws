@@ -62,6 +62,7 @@ export function initDb() {
       status TEXT NOT NULL DEFAULT 'todo' CHECK(status IN ('todo', 'in_progress', 'in_review', 'done', 'cancelled')),
       position INTEGER NOT NULL,
       chat_init INTEGER NOT NULL DEFAULT 0,
+      pending_question TEXT,
       rewind_session_id TEXT,
       rewind_message_uuid TEXT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch() * 1000),

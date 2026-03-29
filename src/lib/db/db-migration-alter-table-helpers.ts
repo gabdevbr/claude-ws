@@ -88,6 +88,9 @@ export function runTasksMigrations(sqlite: InstanceType<typeof Database>): void 
 
   // pending_file_ids for temp file uploads before first attempt starts
   addColumnIfNotExists(sqlite, 'tasks', 'pending_file_ids', 'TEXT');
+
+  // pending_question for persisting AskUserQuestion data across server restarts
+  addColumnIfNotExists(sqlite, 'tasks', 'pending_question', 'TEXT');
 }
 
 /**

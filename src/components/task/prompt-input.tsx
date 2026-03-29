@@ -15,6 +15,7 @@ import { PromptInputFormBody } from '@/components/task/prompt-input-form-body';
 export interface PromptInputRef {
   submit: () => void;
   focus: () => void;
+  clear: () => void;
 }
 
 interface PromptInputProps {
@@ -146,6 +147,7 @@ export const PromptInput = forwardRef<PromptInputRef, PromptInputProps>(({
       handleSubmit({ preventDefault: () => {} } as FormEvent);
     },
     focus: () => { textareaRef.current?.focus(); },
+    clear: () => { updatePrompt(''); },
   }));
 
   return (

@@ -79,6 +79,16 @@ export function FloatingChatWindow({ task, zIndex, onClose, onMaximize, onFocus 
     return () => clearTimeout(timer);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Clear prompt input after auto-start sends the first message
+  // Belt-and-suspenders: key change should remount PromptInput with empty value,
+  // but explicitly clear to handle race conditions between state updates
+  useEffect(() => {
+    if (hasSentFirstMessage) {
+      const timer = setTimeout(() => promptInputRef.current?.clear(), 50);
+      return () => clearTimeout(timer);
+    }
+  }, [hasSentFirstMessage]);
+
   const currentProjectId = activeProjectId || selectedProjectIds[0] || task.projectId;
   const currentProjectPath = currentProjectId ? projects.find(p => p.id === currentProjectId)?.path : undefined;
   const hasShells = currentProjectId ? Array.from(shells.values()).some(s => s.projectId === currentProjectId) : false;

@@ -282,8 +282,8 @@ export function CreateTaskDialog({ open, onOpenChange, onTaskCreated }: CreateTa
               projectPath={projects.find(p => p.id === selectedProjectId)?.path}
               initialValue={draftCreateTaskMessage}
               autoSelect={!!draftCreateTaskMessage}
-              minRows={2}
-              maxRows={4}
+              minRows={7}
+              maxRows={7}
             />
           </div>
 

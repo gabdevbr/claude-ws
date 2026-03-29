@@ -38,6 +38,7 @@ export const tasks = sqliteTable(
     lastModel: text('last_model'),
     lastProvider: text('last_provider'),
     pendingFileIds: text('pending_file_ids'),
+    pendingQuestion: text('pending_question'),
     rewindSessionId: text('rewind_session_id'),
     rewindMessageUuid: text('rewind_message_uuid'),
     createdAt: integer('created_at', { mode: 'number' })

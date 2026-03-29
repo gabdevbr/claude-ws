@@ -169,8 +169,8 @@ export function CreateButlerTaskDialog() {
             projectPath={projectPath}
             initialValue={draftButlerTaskMessage}
             autoSelect={!!draftButlerTaskMessage}
-            minRows={2}
-            maxRows={4}
+            minRows={15}
+            maxRows={15}
           />
 
           {error && (
