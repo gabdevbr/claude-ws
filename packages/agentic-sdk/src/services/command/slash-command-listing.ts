@@ -96,6 +96,36 @@ function scanCommandsDir(dir: string, prefix = ''): CommandInfo[] {
   return commands;
 }
 
+function scanPluginDirs(
+  baseDir: string,
+  type: 'commands' | 'skills',
+): CommandInfo[] {
+  const results: CommandInfo[] = [];
+  try {
+    if (!existsSync(baseDir)) return results;
+    // Structure: <registry>/<plugin>/<version>/<type>/
+    for (const registry of readdirSync(baseDir)) {
+      const registryPath = join(baseDir, registry);
+      if (!statSync(registryPath).isDirectory()) continue;
+      for (const plugin of readdirSync(registryPath)) {
+        const pluginPath = join(registryPath, plugin);
+        if (!statSync(pluginPath).isDirectory()) continue;
+        for (const version of readdirSync(pluginPath)) {
+          const typeDir = join(pluginPath, version, type);
+          if (!existsSync(typeDir) || !statSync(typeDir).isDirectory()) continue;
+          const scanned = type === 'commands' ? scanCommandsDir(typeDir) : scanSkillsDir(typeDir);
+          for (const item of scanned) {
+            // Prefix with plugin name for namespacing (e.g. geo-sus:resolve-sus)
+            const prefixedName = item.name.includes(':') ? item.name : `${plugin}:${item.name}`;
+            results.push({ ...item, name: prefixedName });
+          }
+        }
+      }
+    }
+  } catch { /* unreadable */ }
+  return results;
+}
+
 function scanSkillsDir(dir: string): CommandInfo[] {
   const skills: CommandInfo[] = [];
   try {
@@ -180,6 +210,19 @@ export function createCommandService() {
           if (idx >= 0) skills[idx] = skill;
           else skills.push(skill);
         }
+      }
+
+      // Scan installed plugins for commands and skills
+      const pluginCacheDir = join(homedir(), '.claude', 'plugins', 'cache');
+      for (const cmd of scanPluginDirs(pluginCacheDir, 'commands')) {
+        const idx = userCommands.findIndex((c) => c.name === cmd.name);
+        if (idx >= 0) userCommands[idx] = cmd;
+        else userCommands.push(cmd);
+      }
+      for (const skill of scanPluginDirs(pluginCacheDir, 'skills')) {
+        const idx = skills.findIndex((s) => s.name === skill.name);
+        if (idx >= 0) skills[idx] = skill;
+        else skills.push(skill);
       }
 
       // Deduplicate: user commands and skills override built-ins with same name
