@@ -2,7 +2,7 @@
  * Public API - exports createApp factory, config loader, shared modules, and all service factories
  */
 export { createApp } from './app-factory';
-export { loadEnvConfig, type EnvConfig } from './config/env-config';
+export { loadEnvConfig, extractProviderOverrides, PROVIDER_HEADER_MAP, type EnvConfig, type ProviderKeyOverrides } from './config/env-config';
 
 // Shared modules - re-exported for use by claude-ws via @agentic-sdk/* path alias
 export { createLogger, logger, type Logger } from './lib/pino-logger';

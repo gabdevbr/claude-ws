@@ -210,6 +210,21 @@ async function openExistingPushQueueDb(projectPath: string): Promise<Database.Da
 }
 
 function resolveQueueConfig(projectId: string): QueueConfig {
+  // When running behind proxy, route through proxy hook relay.
+  // Relay strips /api/hooks/:projectId prefix and appends the rest to the real API_HOOK_URL.
+  // Since API_HOOK_URL ends with /files/ (new-style), we mirror that suffix here so
+  // buildApiHookEndpoint() treats it as new-style and just appends endpoint names (manifest, etc.).
+  // Container sends: /api/hooks/:id/files/manifest → relay strips → /files/manifest
+  // → relay joins with API_HOOK_URL base (stripped of /files/) → .../files/manifest ✓
+  const proxyUrl = (process.env.PROXY_URL || '').trim();
+  if (proxyUrl) {
+    return {
+      apiHookUrl: `${proxyUrl.replace(/\/+$/, '')}/api/hooks/${projectId}/files`,
+      apiHookApiKey: process.env.API_ACCESS_KEY || '',
+      projectId,
+    };
+  }
+
   const apiHookUrl = resolveApiHookUrl(undefined, undefined, projectId);
   if (!apiHookUrl) {
     throw new Error(`API_HOOK_URL is not configured from server .env for project ${projectId}.`);
@@ -440,26 +455,42 @@ function buildQueueCandidates(
     }
   }
 
+  // Detect remote files not present locally → candidates for deletion.
+  // Safety: if local workspace is completely empty, skip ALL deletions.
+  // Empty local = fresh container before pull, NOT "user deleted everything".
+  // After pull runs, local always has at least scaffolded .claude/ files.
   const projectPrefix = `${projectId}/`;
-  for (const remote of remoteManifest) {
-    if (localFiles.has(remote.key)) continue;
-
-    const relativePath = remote.key.startsWith(projectPrefix)
-      ? remote.key.slice(projectPrefix.length)
-      : remote.key;
-
-    if (!relativePath || isIgnoredRelativePath(relativePath)) {
-      continue;
+  if (localFiles.size === 0) {
+    const deletableCount = remoteManifest.filter((r) => {
+      if (localFiles.has(r.key)) return false;
+      const rel = r.key.startsWith(projectPrefix) ? r.key.slice(projectPrefix.length) : r.key;
+      return rel && !isIgnoredRelativePath(rel);
+    }).length;
+    if (deletableCount > 0) {
+      log.warn({ projectId, wouldDelete: deletableCount },
+        'Skipping remote deletions: local workspace is empty (pull has not run yet)');
     }
+  } else {
+    for (const remote of remoteManifest) {
+      if (localFiles.has(remote.key)) continue;
 
-    candidates.push({
-      operation: 'delete',
-      key: remote.key,
-      localPath: null,
-      size: remote.size,
-      lastModified: new Date(remote.lastModified).getTime() || 0,
-      fingerprint: `delete:${remote.eTag || `${remote.size}:${remote.lastModified}`}`,
-    });
+      const relativePath = remote.key.startsWith(projectPrefix)
+        ? remote.key.slice(projectPrefix.length)
+        : remote.key;
+
+      if (!relativePath || isIgnoredRelativePath(relativePath)) {
+        continue;
+      }
+
+      candidates.push({
+        operation: 'delete',
+        key: remote.key,
+        localPath: null,
+        size: remote.size,
+        lastModified: new Date(remote.lastModified).getTime() || 0,
+        fingerprint: `delete:${remote.eTag || `${remote.size}:${remote.lastModified}`}`,
+      });
+    }
   }
 
   return candidates;

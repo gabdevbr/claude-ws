@@ -5,6 +5,7 @@
 import { FastifyInstance } from 'fastify';
 import { SessionManager } from '../../lib/session-manager';
 import { createAttemptOrchestrator, AttemptValidationError } from '../../services/attempt/attempt-creation-orchestrator';
+import { extractProviderOverrides } from '../../config/env-config';
 
 export default async function attemptRoot(fastify: FastifyInstance) {
   const sessionManager = new SessionManager(fastify.db);
@@ -21,7 +22,11 @@ export default async function attemptRoot(fastify: FastifyInstance) {
 
   fastify.post('/api/attempts', async (request, reply) => {
     try {
-      const result = await orchestrator.createAndRun(request.body as any);
+      // Extract provider key overrides from proxy-injected headers
+      const providerKeys = extractProviderOverrides(request.headers as Record<string, string | string[] | undefined>);
+      const body = request.body as any;
+      const input = Object.keys(providerKeys).length > 0 ? { ...body, providerKeys } : body;
+      const result = await orchestrator.createAndRun(input);
 
       if (result.type === 'file') {
         reply.header('Content-Type', result.contentType);

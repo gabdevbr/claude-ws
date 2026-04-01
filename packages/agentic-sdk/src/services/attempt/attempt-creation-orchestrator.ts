@@ -5,6 +5,7 @@
  */
 import { formatOutput } from '../../lib/output-formatter';
 import { getContentTypeForFormat } from '../../lib/content-type-map';
+import type { ProviderKeyOverrides } from '../../config/env-config';
 
 /** Input parsed from HTTP request body */
 export interface AttemptCreationInput {
@@ -22,6 +23,7 @@ export interface AttemptCreationInput {
   timeout?: number;
   model?: string;
   provider?: 'claude-cli' | 'claude-sdk';
+  providerKeys?: ProviderKeyOverrides;
 }
 
 /** Transport-agnostic result — routes map this to their framework's response */
@@ -49,6 +51,7 @@ export interface AgentStartParams {
   sessionOptions?: Record<string, any>;
   outputFormat?: string;
   outputSchema?: string;
+  providerKeys?: ProviderKeyOverrides;
 }
 
 /** Services required by the orchestrator (injected by the caller) */
@@ -81,7 +84,7 @@ export function createAttemptOrchestrator(deps: OrchestratorDeps) {
      */
     async createAndRun(input: AttemptCreationInput): Promise<AttemptResult> {
      try {
-      const { request_method = 'queue', output_format, output_schema, timeout = 300000, model, provider } = input;
+      const { request_method = 'queue', output_format, output_schema, timeout = 300000, model, provider, providerKeys } = input;
 
       // Validate
       this.validate(input);
@@ -128,6 +131,7 @@ export function createAttemptOrchestrator(deps: OrchestratorDeps) {
         sessionOptions: Object.keys(sessionOptions).length > 0 ? sessionOptions : undefined,
         outputFormat: output_format || undefined,
         outputSchema: output_schema || undefined,
+        providerKeys,
       });
 
       // Queue mode: return immediately

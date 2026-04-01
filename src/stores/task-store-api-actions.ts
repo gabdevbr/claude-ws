@@ -31,9 +31,14 @@ export async function fetchTasksAction(
   set: (fn: (s: { tasks: Task[] }) => Partial<{ tasks: Task[] }>) => void
 ): Promise<void> {
   try {
-    const query = projectIds.length > 0 ? `?projectIds=${projectIds.join(',')}` : '';
+    if (projectIds.length === 0) { set(() => ({ tasks: [] })); return; }
+    const query = `?projectIds=${projectIds.join(',')}`;
     const res = await fetch(`/api/tasks${query}`);
-    if (!res.ok) throw new Error('Failed to fetch tasks');
+    if (!res.ok) {
+      // 401 is expected in sandbox mode before project context is established
+      if (res.status !== 401 && res.status !== 502) log.error({ status: res.status }, 'Error fetching tasks');
+      return;
+    }
     const tasks = await res.json();
     set(() => ({ tasks }));
   } catch (error) {

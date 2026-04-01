@@ -53,12 +53,10 @@ export class AgentManager extends EventEmitter {
     });
 
     this.provider.on('complete', (data: { attemptId: string; sessionId?: string }) => {
-      if (data.sessionId) {
-        const instance = this.agents.get(data.attemptId);
-        if (instance) instance.sessionId = data.sessionId;
-      }
+      const instance = this.agents.get(data.attemptId);
+      const sessionId = data.sessionId || instance?.sessionId;
       this.agents.delete(data.attemptId);
-      this.emit('exit', { attemptId: data.attemptId, code: 0 });
+      this.emit('exit', { attemptId: data.attemptId, code: 0, sessionId });
     });
 
     this.provider.on('error', (data: {
@@ -97,6 +95,7 @@ export class AgentManager extends EventEmitter {
         model: options.model,
         sessionOptions: options.sessionOptions,
         maxTurns: options.maxTurns,
+        providerKeys: options.providerKeys,
       });
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';

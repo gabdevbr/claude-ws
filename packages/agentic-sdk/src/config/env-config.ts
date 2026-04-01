@@ -19,6 +19,38 @@ export interface EnvConfig {
   nodeEnv: string;
 }
 
+/** Provider keys that can be overridden per-request via proxy headers. */
+export interface ProviderKeyOverrides {
+  anthropicBaseUrl?: string;
+  anthropicAuthToken?: string;
+  anthropicModel?: string;
+  anthropicDefaultOpusModel?: string;
+  anthropicDefaultSonnetModel?: string;
+  anthropicDefaultHaikuModel?: string;
+}
+
+/** Header names used by the proxy to inject provider keys. */
+export const PROVIDER_HEADER_MAP: Record<keyof ProviderKeyOverrides, string> = {
+  anthropicBaseUrl: 'x-provider-anthropic-base-url',
+  anthropicAuthToken: 'x-provider-anthropic-auth-token',
+  anthropicModel: 'x-provider-anthropic-model',
+  anthropicDefaultOpusModel: 'x-provider-anthropic-default-opus-model',
+  anthropicDefaultSonnetModel: 'x-provider-anthropic-default-sonnet-model',
+  anthropicDefaultHaikuModel: 'x-provider-anthropic-default-haiku-model',
+};
+
+/** Extract provider key overrides from request headers. */
+export function extractProviderOverrides(headers: Record<string, string | string[] | undefined>): ProviderKeyOverrides {
+  const overrides: ProviderKeyOverrides = {};
+  for (const [key, headerName] of Object.entries(PROVIDER_HEADER_MAP)) {
+    const value = headers[headerName];
+    if (typeof value === 'string' && value.length > 0) {
+      overrides[key as keyof ProviderKeyOverrides] = value;
+    }
+  }
+  return overrides;
+}
+
 export function loadEnvConfig(): EnvConfig {
   const model = process.env.ANTHROPIC_MODEL ?? '';
   // Data dir: use AGENTIC_SDK_DATA_DIR, or DATA_DIR, or default to project-root/data

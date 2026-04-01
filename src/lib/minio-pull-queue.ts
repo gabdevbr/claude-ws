@@ -243,6 +243,17 @@ async function openExistingPullQueueDb(projectPath: string): Promise<Database.Da
 }
 
 function resolveQueueConfig(projectId: string): QueueConfig {
+  // When running behind proxy, route through proxy hook relay.
+  // Mirror /files suffix so buildApiHookEndpoint treats it as new-style.
+  const proxyUrl = (process.env.PROXY_URL || '').trim();
+  if (proxyUrl) {
+    return {
+      apiHookUrl: `${proxyUrl.replace(/\/+$/, '')}/api/hooks/${projectId}/files`,
+      apiHookApiKey: process.env.API_ACCESS_KEY || '',
+      projectId,
+    };
+  }
+
   const apiHookUrl = resolveApiHookUrl(undefined, undefined, projectId);
   if (!apiHookUrl) {
     throw new Error(`API_HOOK_URL is not configured from server .env for project ${projectId}.`);

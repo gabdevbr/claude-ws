@@ -15,6 +15,13 @@ function resolveRoomTemplate(value: string, projectId: string): string {
 }
 
 function resolveApiHookUrl(projectId: string): string {
+  // When running behind proxy, route hooks through proxy relay endpoint
+  const proxyUrl = (process.env.PROXY_URL || "").trim();
+  if (proxyUrl) {
+    return `${proxyUrl.replace(/\/+$/, "")}/api/hooks/${projectId}`;
+  }
+
+  // Standalone mode: use direct hook URL
   const domainTemplate = process.env.API_HOOK_URL_DOMAIN || "";
   if (domainTemplate.trim()) {
     return resolveRoomTemplate(domainTemplate, projectId);
@@ -98,9 +105,14 @@ function initializeRuntimeConfig() {
     const queuePort = (process.env.PORT || "").trim();
     const apiQueueUrl = (queuePort ? `http://localhost:${queuePort}` : "").trim();
 
+    const isProxied = !!(process.env.PROXY_URL || "").trim();
+
     config = {
         apiBaseUrl: resolveApiHookUrl(PROJECT_ID),
-        apiHookApiKey: (process.env.API_HOOK_API_KEY || "").trim(),
+        // When proxied, proxy injects the real API_HOOK_API_KEY; use API_ACCESS_KEY for proxy auth instead
+        apiHookApiKey: isProxied
+            ? (process.env.API_ACCESS_KEY || "").trim()
+            : (process.env.API_HOOK_API_KEY || "").trim(),
         apiQueueUrl,
         apiQueueKey: (process.env.API_ACCESS_KEY || "").trim(),
         projectId: PROJECT_ID,
@@ -108,7 +120,7 @@ function initializeRuntimeConfig() {
     };
 
     if (!config.apiBaseUrl) {
-        console.error("❌ Missing API_HOOK_URL in workspace root .env!");
+        console.error("❌ Missing API_HOOK_URL or PROXY_URL in workspace root .env!");
         process.exit(1);
     }
 }

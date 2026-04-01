@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAuthVerificationService } from '@agentic-sdk/services/auth-verification';
 
-const authService = createAuthVerificationService(process.env.API_ACCESS_KEY);
+/** Read env at request time — module-level reads may miss dotenv values in Next.js dev mode. */
+function getAuthService() {
+  return createAuthVerificationService(process.env.API_ACCESS_KEY);
+}
+
+function isSandboxMode() {
+  return !!process.env.NEXT_PUBLIC_PROXY_URL;
+}
 
 /**
  * Verify API key endpoint
@@ -11,6 +18,8 @@ const authService = createAuthVerificationService(process.env.API_ACCESS_KEY);
  */
 export async function POST(request: NextRequest) {
   try {
+    if (isSandboxMode()) return NextResponse.json({ valid: true, authRequired: false });
+    const authService = getAuthService();
     const body = await request.json();
     const { apiKey } = body;
     const authRequired = authService.isAuthEnabled();
@@ -30,5 +39,6 @@ export async function POST(request: NextRequest) {
  * Returns: { authRequired: boolean }
  */
 export async function GET() {
-  return NextResponse.json({ authRequired: authService.isAuthEnabled() });
+  if (isSandboxMode()) return NextResponse.json({ authRequired: false });
+  return NextResponse.json({ authRequired: getAuthService().isAuthEnabled() });
 }

@@ -6,18 +6,22 @@
 
 import { EventEmitter } from 'events';
 import { existsSync, readFileSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { homedir } from 'os';
 import { query, type Query } from '@anthropic-ai/claude-agent-sdk';
 import { createRequire } from 'module';
 
-// Resolve cli.js path explicitly to work around pnpm nested node_modules layout
-// where the SDK's built-in dirname-based resolution fails
+// Resolve cli.js path: find SDK root by resolving the main entry point,
+// then walk up to the package directory and join cli.js directly.
+// This bypasses the strict "exports" field which doesn't expose cli.js or package.json,
+// causing ERR_PACKAGE_PATH_NOT_EXPORTED in Docker Node 20.
 const require_ = createRequire(import.meta.url);
-const CLAUDE_CLI_PATH = require_.resolve('@anthropic-ai/claude-agent-sdk/cli.js');
+const sdkMainPath = require_.resolve('@anthropic-ai/claude-agent-sdk');
+const CLAUDE_CLI_PATH = join(dirname(sdkMainPath), 'cli.js');
 import { adaptSDKMessage, isValidSDKMessage } from './claude-sdk-message-to-output-adapter';
 import type { SDKResultMessage } from './claude-sdk-message-to-output-adapter';
 import { createLogger } from '../lib/pino-logger';
+import type { ProviderKeyOverrides } from '../config/env-config';
 
 const log = createLogger('SDKProvider');
 
@@ -141,7 +145,7 @@ export class AgentProvider extends EventEmitter {
   async start(options: {
     attemptId: string; projectPath: string; prompt: string;
     model?: string; sessionOptions?: { resume?: string; resumeSessionAt?: string };
-    maxTurns?: number;
+    maxTurns?: number; providerKeys?: ProviderKeyOverrides;
   }): Promise<void> {
     const { attemptId } = options;
     const controller = new AbortController();
@@ -151,11 +155,23 @@ export class AgentProvider extends EventEmitter {
     this.runQuery(session, options).catch(() => {});
   }
 
+  /** Build per-request provider config: request overrides > constructor config > env fallback. */
+  private resolveProviderConfig(providerKeys?: ProviderKeyOverrides) {
+    return {
+      anthropicBaseUrl: providerKeys?.anthropicBaseUrl || this.config.anthropicBaseUrl,
+      anthropicAuthToken: providerKeys?.anthropicAuthToken || this.config.anthropicAuthToken,
+      anthropicModel: providerKeys?.anthropicModel || this.config.anthropicModel,
+      anthropicDefaultOpusModel: providerKeys?.anthropicDefaultOpusModel || this.config.anthropicDefaultOpusModel,
+      anthropicDefaultSonnetModel: providerKeys?.anthropicDefaultSonnetModel || this.config.anthropicDefaultSonnetModel,
+      anthropicDefaultHaikuModel: providerKeys?.anthropicDefaultHaikuModel || this.config.anthropicDefaultHaikuModel,
+    };
+  }
+
   private async runQuery(
     session: SDKSession,
-    options: { attemptId: string; projectPath: string; prompt: string; model?: string; sessionOptions?: { resume?: string; resumeSessionAt?: string }; maxTurns?: number }
+    options: { attemptId: string; projectPath: string; prompt: string; model?: string; sessionOptions?: { resume?: string; resumeSessionAt?: string }; maxTurns?: number; providerKeys?: ProviderKeyOverrides }
   ): Promise<void> {
-    const { attemptId, projectPath, prompt, sessionOptions, maxTurns, model } = options;
+    const { attemptId, projectPath, prompt, sessionOptions, maxTurns, model, providerKeys } = options;
     const { controller } = session;
 
     try {
@@ -168,18 +184,21 @@ export class AgentProvider extends EventEmitter {
 
       const mcpConfig = loadMCPConfig(projectPath);
       const mcpWildcards = mcpConfig?.mcpServers ? Object.keys(mcpConfig.mcpServers).map(n => `mcp__${n}__*`) : [];
-      // Use custom model from env if configured, otherwise resolve alias
-      const defaultModel = this.config.anthropicModel || 'opus';
+
+      // Resolve provider config: per-request overrides > constructor config > env
+      const resolved = this.resolveProviderConfig(providerKeys);
+      const defaultModel = resolved.anthropicModel || 'opus';
       const effectiveModel = model ? this.resolveModel(model) : defaultModel;
 
-      // Set env vars on process.env so the SDK subprocess inherits them
-      if (this.config.anthropicBaseUrl) process.env.ANTHROPIC_BASE_URL = this.config.anthropicBaseUrl;
-      if (this.config.anthropicAuthToken) {
-        process.env.ANTHROPIC_AUTH_TOKEN = this.config.anthropicAuthToken;
-        process.env.ANTHROPIC_API_KEY = this.config.anthropicAuthToken;
+      // Build subprocess env — isolate per-request keys instead of mutating process.env
+      const subprocessEnv = { ...process.env };
+      if (resolved.anthropicBaseUrl) subprocessEnv.ANTHROPIC_BASE_URL = resolved.anthropicBaseUrl;
+      if (resolved.anthropicAuthToken) {
+        subprocessEnv.ANTHROPIC_AUTH_TOKEN = resolved.anthropicAuthToken;
+        subprocessEnv.ANTHROPIC_API_KEY = resolved.anthropicAuthToken;
       }
-      delete process.env.CLAUDECODE;
-      delete process.env.CLAUDE_CODE_ENTRYPOINT;
+      delete subprocessEnv.CLAUDECODE;
+      delete subprocessEnv.CLAUDE_CODE_ENTRYPOINT;
 
       const queryOptions = {
         cwd: projectPath,
@@ -222,6 +241,7 @@ export class AgentProvider extends EventEmitter {
         options: {
           ...queryOptions,
           pathToClaudeCodeExecutable: CLAUDE_CLI_PATH,
+          env: subprocessEnv as Record<string, string>,
           systemPrompt: { type: 'preset' as const, preset: 'claude_code' as const, append: '' },
           stderr: (data: string) => { log.error({ stderr: data.slice(0, 500), attemptId }, 'Claude stderr'); },
         },

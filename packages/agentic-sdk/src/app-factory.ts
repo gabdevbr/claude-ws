@@ -99,10 +99,10 @@ export async function createApp(envConfig: EnvConfig) {
     }
   });
 
-  agentManager.on('exit', async (data: { attemptId: string; code: number }) => {
+  agentManager.on('exit', async (data: { attemptId: string; code: number; sessionId?: string }) => {
     try {
       const status = data.code === 0 ? 'completed' : 'error';
-      await services.attempt.updateStatus(data.attemptId, status);
+      await services.attempt.updateStatus(data.attemptId, status, data.sessionId ? { sessionId: data.sessionId } : undefined);
     } catch (err) {
       app.log.error({ err, attemptId: data.attemptId }, 'Failed to update attempt status');
     }

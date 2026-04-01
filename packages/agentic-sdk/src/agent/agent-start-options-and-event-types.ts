@@ -2,6 +2,7 @@
  * Agent start options and event type definitions for the agentic-sdk agent layer.
  * Used by AgentManager and AgentProvider to type agent lifecycle events.
  */
+import type { ProviderKeyOverrides } from '../config/env-config';
 
 export interface AgentStartOptions {
   attemptId: string;
@@ -15,6 +16,7 @@ export interface AgentStartOptions {
   maxTurns?: number;
   outputFormat?: string;
   outputSchema?: string;
+  providerKeys?: ProviderKeyOverrides;
 }
 
 export interface BackgroundShellInfo {
